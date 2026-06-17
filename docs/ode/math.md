@@ -56,7 +56,7 @@ $\mathbf{f}(\mathbf{x}(t), t)$. Because time is represented as a univariate
 TE $t = t_n + \tau$, evaluating $\mathbf{f}$ on TE-valued state
 automatically yields the entire series
 $\mathbf{f}^{[0]}, \mathbf{f}^{[1]}, \ldots, \mathbf{f}^{[N-1]}$ via the
-chain rule (the core machinery of the [core module](../core/math.md)).
+chain rule (the core machinery of [tax's recurrence relations](https://andreapasquale94.github.io/tax/internals/recurrences/)).
 
 After $N$ evaluations of the RHS, every coefficient up to $\mathbf{x}^{[N]}$
 is exact (modulo truncation).
