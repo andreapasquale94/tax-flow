@@ -1,5 +1,8 @@
 # tax-flow
 
+[![Tests](https://github.com/andreapasquale94/tax-flow/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/andreapasquale94/tax-flow/actions/workflows/tests.yml)
+[![Docs](https://github.com/andreapasquale94/tax-flow/actions/workflows/docs.yml/badge.svg?branch=main)](https://andreapasquale94.github.io/tax-flow/)
+
 **Adaptive ODE integration and Automatic Domain Splitting built on
 [`tax`](https://github.com/andreapasquale94/tax).**
 

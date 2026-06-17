@@ -1,0 +1,68 @@
+name: Sanitizers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sanitizers:
+    name: sanitizer / ${{ matrix.sanitizer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: asan
+            flags: "-fsanitize=address -fno-omit-frame-pointer -O1 -g"
+          - sanitizer: ubsan
+            flags: "-fsanitize=undefined -fno-omit-frame-pointer -O1 -g"
+          - sanitizer: tsan
+            flags: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g"
+
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Checkout tax-flow
+        uses: actions/checkout@v4
+        with:
+          path: tax-flow
+
+      - name: Checkout tax (dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: andreapasquale94/tax
+          ref: main
+          path: tax
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: "4.2.x"
+
+      - name: Install clang and Eigen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libeigen3-dev ninja-build
+
+      - name: Toolchain info
+        run: |
+          cmake --version
+          "$CC" --version
+          "$CXX" --version
+
+      - name: Configure
+        run: >
+          cmake -S tax-flow -B build-${{ matrix.sanitizer }}
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DTAXFLOW_BUILD_UNITTESTS=ON
+          -DTAX_SOURCE_DIR=${{ github.workspace }}/tax
+          -G Ninja
+          "-DCMAKE_CXX_FLAGS=${{ matrix.flags }}"
+          "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.flags }}"
+
+      - name: Build
+        run: cmake --build build-${{ matrix.sanitizer }} -j 2
+
+      - name: Test
+        run: ctest --test-dir build-${{ matrix.sanitizer }} --output-on-failure
