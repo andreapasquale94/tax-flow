@@ -1,0 +1,23 @@
+.vscode
+.claude
+build*/
+site/
+__pycache__/
+
+# Example output files (written to cwd by examples/*)
+/taylor.json
+/ads.json
+/loads.json
+/validation.json
+/cr3bp_taylor.json
+/cr3bp_ads.json
+/cr3bp_loads.json
+/manifolds.json
+/wsb_reference.json
+/wsb_search.json
+/wsb_taylor.json
+/wsb_ads.json
+/wsb_loads.json
+/wsb_*.png
+/two_body_*.png
+/three_body_*.png

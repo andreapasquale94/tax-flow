@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(tax)
+
+include("${CMAKE_CURRENT_LIST_DIR}/taxFlowTargets.cmake")

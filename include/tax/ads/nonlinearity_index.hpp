@@ -1,0 +1,114 @@
+// include/tax/ads/nonlinearity_index.hpp
+//
+// LOADS nonlinearity-index math. All helpers live in tax::ads::detail
+// and operate on TaylorExpansion<T, N, M, Storage> over the normalized
+// box [-1, 1]^M (the basis in which DA states built from a Box live).
+//
+//   linRowBound(f)            = Σ_{|α|=1} |coeff(α)|
+//   jacobianVariationBound(f) = vector v ∈ R^M with
+//                                v[j] = Σ_{|α|≥2} |coeff(α)| · α_j
+//   nonlinearityIndex(F)      = max_i ||v_i||_1 / linRowBound(F_i)
+//   nliSplitDim(F)            = argmax_j Σ_i v_i[j]
+
+#pragma once
+
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <limits>
+#include <tax/core/multi_index.hpp>
+#include <tax/core/taylor_expansion.hpp>
+#include <tax/la/types.hpp>
+
+namespace tax::ads::detail
+{
+
+// Sum of |coefficients| at total degree 1.
+template < class T, int N, int M, class Storage >
+[[nodiscard]] T linRowBound(
+    const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
+{
+    static_assert( N >= 1, "linRowBound requires N >= 1" );
+    T acc{ 0 };
+    for ( int j = 0; j < M; ++j )
+    {
+        tax::MultiIndex< M > alpha{};
+        alpha[static_cast< std::size_t >( j )] = 1;
+        acc += std::abs( f.coeff( alpha ) );
+    }
+    return acc;
+}
+
+// Per-coordinate j: Σ over total-degree-≥2 monomials of |coeff| * α_j.
+template < class T, int N, int M, class Storage >
+[[nodiscard]] std::array< T, M > jacobianVariationBound(
+    const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
+{
+    std::array< T, M > bound{};
+    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
+    for ( std::size_t k = 0; k < Ncoef; ++k )
+    {
+        const auto alpha = tax::unflatIndex< M >( k );
+        int total = 0;
+        for ( int j = 0; j < M; ++j ) total += alpha[static_cast< std::size_t >( j )];
+        if ( total < 2 ) continue;
+        const T mag = std::abs( f[k] );
+        for ( int j = 0; j < M; ++j )
+        {
+            const int aj = alpha[static_cast< std::size_t >( j )];
+            bound[static_cast< std::size_t >( j )] += mag * T( aj );
+        }
+    }
+    return bound;
+}
+
+// LOADS nonlinearity index over a vector of TE rows.
+template < class T, int N, int M, class Storage, int D >
+[[nodiscard]] double nonlinearityIndex(
+    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+{
+    double best = 0.0;
+    for ( Eigen::Index i = 0; i < f.size(); ++i )
+    {
+        const auto& row = f( i );
+        const auto var = jacobianVariationBound( row );
+        T var_l1{ 0 };
+        for ( int j = 0; j < M; ++j ) var_l1 += var[static_cast< std::size_t >( j )];
+        const T lin = linRowBound( row );
+        if ( lin <= T{ 0 } )
+        {
+            if ( var_l1 > T{ 0 } ) best = std::numeric_limits< double >::infinity();
+            continue;
+        }
+        const double ratio = static_cast< double >( var_l1 ) / static_cast< double >( lin );
+        if ( ratio > best ) best = ratio;
+    }
+    return best;
+}
+
+// Split dimension: argmax over j of Σ_i v_i[j].
+template < class T, int N, int M, class Storage, int D >
+[[nodiscard]] int nliSplitDim(
+    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+{
+    std::array< T, M > totals{};
+    for ( Eigen::Index i = 0; i < f.size(); ++i )
+    {
+        const auto v = jacobianVariationBound( f( i ) );
+        for ( int j = 0; j < M; ++j )
+            totals[static_cast< std::size_t >( j )] += v[static_cast< std::size_t >( j )];
+    }
+    int best_j = 0;
+    T best_val = totals[0];
+    for ( int j = 1; j < M; ++j )
+    {
+        if ( totals[static_cast< std::size_t >( j )] > best_val )
+        {
+            best_val = totals[static_cast< std::size_t >( j )];
+            best_j = j;
+        }
+    }
+    return best_j;
+}
+
+}  // namespace tax::ads::detail

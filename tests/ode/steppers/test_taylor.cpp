@@ -1,0 +1,85 @@
+// tests/ode/testTaylorStepper.cpp
+//
+// Stepper-level correctness. We exercise dx/dt = x (analytic
+// solution exp(t)) and the harmonic oscillator dx/dt = (v, -x) with
+// analytic solution (cos t, -sin t) starting from (1, 0).
+
+#include <gtest/gtest.h>
+
+#include <tax/la/types.hpp>
+#include <cmath>
+
+#include <tax/ode.hpp>
+
+using tax::ode::IntegratorConfig;
+using tax::ode::TaylorStepper;
+using tax::ode::controllers::JorbaZou;
+using tax::ode::controllers::PI;
+
+TEST( OdeTaylorStepper, ExponentialOneStep )
+{
+    using State = tax::la::VecNT< 1, double >;
+    TaylorStepper< 12, State > stepper;
+
+    State x0;
+    x0( 0 ) = 1.0;
+    const auto f = []( const auto& x, const auto& /*t*/ ) { return x; };
+
+    IntegratorConfig< double > cfg;
+    cfg.abstol = 1e-12;
+
+    auto r = stepper.step( f, x0, /*t=*/0.0, /*h=*/0.1, cfg );
+
+    EXPECT_TRUE( r.accepted );
+    // x(0.1) = e^0.1 ≈ 1.10517091808...
+    EXPECT_NEAR( r.x_new( 0 ), std::exp( 0.1 ), 1e-12 );
+    // eval_dense at the step start reproduces x0.
+    auto x_at_t0 = TaylorStepper< 12, State >::eval_dense(
+        r.dense, 0.0, 0.0 );
+    EXPECT_NEAR( x_at_t0( 0 ), x0( 0 ), 1e-14 );
+    // eval_dense at the step end reproduces x_new.
+    auto x_at_t1 = TaylorStepper< 12, State >::eval_dense(
+        r.dense, 0.0, r.h_used );
+    EXPECT_NEAR( x_at_t1( 0 ), r.x_new( 0 ), 1e-14 );
+}
+
+TEST( OdeTaylorStepper, HarmonicOneStep )
+{
+    using State = tax::la::VecNT< 2, double >;
+    TaylorStepper< 12, State > stepper;
+
+    State x0;
+    x0( 0 ) = 1.0;  // q
+    x0( 1 ) = 0.0;  // p
+    const auto f = []( const auto& x, const auto& /*t*/ )
+    {
+        using S = std::decay_t< decltype( x ) >;
+        S out;
+        out( 0 ) =  x( 1 );
+        out( 1 ) = -x( 0 );
+        return out;
+    };
+
+    IntegratorConfig< double > cfg;
+    cfg.abstol = 1e-12;
+    auto r = stepper.step( f, x0, 0.0, 0.05, cfg );
+
+    EXPECT_TRUE( r.accepted );
+    EXPECT_NEAR( r.x_new( 0 ),  std::cos( 0.05 ), 1e-12 );
+    EXPECT_NEAR( r.x_new( 1 ), -std::sin( 0.05 ), 1e-12 );
+}
+
+TEST( OdeTaylorStepper, ControllerPIAlsoWorks )
+{
+    using State = tax::la::VecNT< 1, double >;
+    TaylorStepper< 10, State, PI< double > > stepper;
+
+    State x0;
+    x0( 0 ) = 1.0;
+    const auto f = []( const auto& x, const auto& /*t*/ ) { return x; };
+
+    IntegratorConfig< double > cfg;
+    auto r = stepper.step( f, x0, 0.0, 0.05, cfg );
+    EXPECT_TRUE( r.accepted );
+    EXPECT_NEAR( r.x_new( 0 ), std::exp( 0.05 ), 1e-10 );
+}
