@@ -7,8 +7,8 @@
 truncated-Taylor core. It provides two header-only modules:
 
 - **ODE Integrator (`tax::ode`)** — adaptive Runge–Kutta and Taylor-method
-  integration with an event system (triggers/actions), step recording, and
-  step-size controllers.
+  integration with a typed event system (`Event<State,T>` objects), step
+  recording, and step-size controllers.
 - **Automatic Domain Splitting (`tax::ads`)** — Wittig 2015 ADS and the LOADS
   variant (Losacco/Fossà/Armellin 2024), composed on top of the `tax::ode`
   event infrastructure.

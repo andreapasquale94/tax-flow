@@ -1,19 +1,15 @@
 // include/tax/ads/split_event.hpp
 //
-// Interop with tax::ode::Event. A SplitRequest is the side-channel from
-// the driver-owned split event back to the BFS driver: the trigger asks
-// the criterion whether the current DA state demands a split, and the
-// action records {fired, dim, t} into the request and returns
-// ControlFlow::Terminate. The integrator then truncates the solution at
-// the step boundary; the driver consumes req to decide split-vs-done.
-//
-// Note: tax::ode is not modified. Trigger and Action satisfy ode's
-// std::function-erased signatures.
+// Interop with tax::ode::Event. SplitEvent fires at the step boundary iff the
+// criterion demands a split; it writes {fired, dim, t} into the driver-owned
+// SplitRequest and returns Action::Terminate so the integrator truncates the
+// solution at the boundary. The driver then consumes req to decide split-vs-done.
 
 #pragma once
 
-#include <optional>
+#include <string>
 #include <tax/ode/event.hpp>
+#include <utility>
 
 namespace tax::ads
 {
@@ -26,31 +22,33 @@ struct SplitRequest
     T t = T{ 0 };
 };
 
-// Trigger: fires at the step boundary iff criterion.shouldSplit is true.
-// `depth` is captured by value at construction (the driver builds a new
-// event per BFS leaf, so the leaf's depth is known).
-template < class Criterion >
-[[nodiscard]] auto SplitTrigger( Criterion crit, int depth )
+template < class State, class T, class Criterion >
+class SplitEvent final : public tax::ode::BaseEvent< SplitEvent< State, T, Criterion >, State, T >
 {
-    return [crit = std::move( crit ),
-            depth]< class Ctx >( const Ctx& ctx ) -> std::optional< typename Ctx::T_type > {
-        if ( crit.shouldSplit( ctx.x_new, depth ) ) return ctx.h_used;
-        return std::nullopt;
-    };
-}
+   public:
+    using Action = typename tax::ode::Event< State, T >::Action;
 
-// Action: write {fired, dim, t} into *out and Terminate. The caller
-// keeps `out` alive for the duration of Integrator::integrate().
-template < class Criterion, class T >
-[[nodiscard]] auto SplitAction( Criterion crit, SplitRequest< T >* out )
-{
-    return [crit = std::move( crit ), out]< class Ctx, class TT, class Storage >(
-               const Ctx& ctx, TT tau, Storage& ) -> tax::ode::ControlFlow {
-        out->fired = true;
-        out->dim = crit.splitDim( ctx.x_new );
-        out->t = ctx.t_old + static_cast< T >( tau );
-        return tax::ode::ControlFlow::Terminate;
-    };
-}
+    SplitEvent( Criterion crit, int depth, SplitRequest< T >* out )
+        : crit_( std::move( crit ) ), depth_( depth ), out_( out )
+    {
+    }
+
+    [[nodiscard]] std::string name() const override { return "ads:split"; }
+
+    Action onStep( tax::ode::Recorder< State, T >& /*rec*/ ) override
+    {
+        const State& x_new = this->eval_->xNew();
+        if ( !crit_.shouldSplit( x_new, depth_ ) ) return Action::Continue;
+        out_->fired = true;
+        out_->dim = crit_.splitDim( x_new );
+        out_->t = this->eval_->tOld() + this->eval_->hUsed();
+        return Action::Terminate;
+    }
+
+   private:
+    Criterion crit_;
+    int depth_;
+    SplitRequest< T >* out_;
+};
 
 }  // namespace tax::ads

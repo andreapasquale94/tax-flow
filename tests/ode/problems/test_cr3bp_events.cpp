@@ -1,6 +1,6 @@
 // tests/ode/testCR3BPEvents.cpp
 //
-// CR3BP propagation with ZeroCrossing events:
+// CR3BP propagation with RootFindingEvent events:
 //   - L1 crossing  (x crosses x_L1 going +x)
 //   - lunar periapsis  ((x - 1 + μ)·vx + y·vy crosses zero going +)
 //   - L2 crossing  (x crosses x_L2 going +x)
@@ -21,11 +21,7 @@
 
 using namespace tax::ode::test;
 using tax::ode::Direction;
-using tax::ode::Event;
 using tax::ode::IntegratorConfig;
-using tax::ode::Record;
-using tax::ode::TaylorStepper;
-using tax::ode::ZeroCrossing;
 
 TEST( OdeCR3BPEvents, TaylorRecordsL1MoonL2 )
 {
@@ -35,29 +31,22 @@ TEST( OdeCR3BPEvents, TaylorRecordsL1MoonL2 )
     IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-13;
 
-    using Stepper = TaylorStepper< N, State >;
-    std::vector< Event< Stepper > > events;
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( cr3bp_rhs() ) >
+        integ{ cr3bp_rhs(), cfg };
 
-    events.emplace_back(
-        ZeroCrossing( []( const auto& s, const auto& /*t*/ ) { return s( 0 ) - kCR3BPL1; },
-                      Direction::Increasing ),
-        Record( "L1" ) );
+    integ.addRootFindingEvent( []( const auto& s, const auto& /*t*/ ) { return s( 0 ) - kCR3BPL1; },
+                               Direction::Increasing, "L1", /*terminal=*/false );
 
     const double mu = kCR3BPMu;
-    events.emplace_back( ZeroCrossing(
-                             [mu]( const auto& s, const auto& /*t*/ ) {
-                                 return ( s( 0 ) - 1.0 + mu ) * s( 2 ) + s( 1 ) * s( 3 );
-                             },
-                             Direction::Increasing ),
-                         Record( "moon_periapsis" ) );
+    integ.addRootFindingEvent(
+        [mu]( const auto& s, const auto& /*t*/ ) {
+            return ( s( 0 ) - 1.0 + mu ) * s( 2 ) + s( 1 ) * s( 3 );
+        },
+        Direction::Increasing, "moon_periapsis", /*terminal=*/false );
 
-    events.emplace_back(
-        ZeroCrossing( []( const auto& s, const auto& /*t*/ ) { return s( 0 ) - kCR3BPL2; },
-                      Direction::Increasing ),
-        Record( "L2" ) );
+    integ.addRootFindingEvent( []( const auto& s, const auto& /*t*/ ) { return s( 0 ) - kCR3BPL2; },
+                               Direction::Increasing, "L2", /*terminal=*/false );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( cr3bp_rhs() ) >
-        integ{ cr3bp_rhs(), cfg, std::move( events ) };
     auto sol = integ.integrate( cr3bp_transit_ic(), 0.0, kCR3BPTFinal );
 
     const auto countLabel = [&]( const char* lbl ) {

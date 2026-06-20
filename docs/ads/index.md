@@ -108,7 +108,7 @@ dimension.
 | `tax/ads/da_state.hpp` | `create`, `split` (DA-state identity & re-identification) |
 | `tax/ads/criteria.hpp` | `SplitCriterion`, `TruncationCriterion`, `NliCriterion` |
 | `tax/ads/nonlinearity_index.hpp` | LOADS helpers (`nonlinearityIndex`, `nliSplitDim`, …) |
-| `tax/ads/split_event.hpp` | `SplitRequest`, `SplitTrigger`, `SplitAction` |
+| `tax/ads/split_event.hpp` | `SplitRequest`, `SplitEvent` |
 | `tax/ads/driver.hpp` | `AdsDriver<Stepper, Criterion>` |
 | `tax/ads/propagate.hpp` | `propagate<P>(method, criterion, …)` |
 | `tax/ads/refine_criteria.hpp` | `QualityCriterion`, `CoefficientMatchCriterion`, `VolumeRatioCriterion` |

@@ -14,11 +14,7 @@
 #include <vector>
 
 using tax::ode::Direction;
-using tax::ode::Event;
 using tax::ode::IntegratorConfig;
-using tax::ode::Record;
-using tax::ode::TaylorStepper;
-using tax::ode::ZeroCrossing;
 
 // x' = x  ⟹  x(t) = exp(t)
 static const auto exp_rhs = []( const auto& x, const auto& ) { return x; };
@@ -79,22 +75,14 @@ TEST( OdeSaveSteps, EventsRecordedRegardlessOfSaveSteps )
     // Guard function: x - 2 (increasing zero crossing at t = ln 2).
     auto guard = []( const auto& x, const auto& ) { return x( 0 ) - 2.0; };
 
-    auto make_events = []( auto& g ) {
-        using Stepper = TaylorStepper< N, State >;
-        std::vector< Event< Stepper > > evs;
-        evs.emplace_back( ZeroCrossing( g, Direction::Increasing ), Record( "x_eq_2" ) );
-        return evs;
-    };
-
     auto run = [&]( bool save_steps_flag ) {
         IntegratorConfig< double > cfg;
         cfg.abstol = cfg.reltol = 1e-12;
         cfg.save_steps = save_steps_flag;
 
-        auto events = make_events( guard );
-
         tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( exp_rhs ) >
-            integ{ exp_rhs, cfg, std::move( events ) };
+            integ{ exp_rhs, cfg };
+        integ.addRootFindingEvent( guard, Direction::Increasing, "x_eq_2", /*terminal=*/false );
 
         State x0;
         x0( 0 ) = 1.0;

@@ -33,6 +33,8 @@ tax_add_test(test_ode_integrator_save_steps SOURCES integrator/test_save_steps.c
 # ---- Events -------------------------------------------------------------
 tax_add_test(test_ode_events_zero_crossing SOURCES events/test_zero_crossing.cpp)
 tax_add_test(test_ode_events_every_step    SOURCES events/test_every_step.cpp)
+tax_add_test(test_ode_step_evaluator       SOURCES events/test_step_evaluator.cpp)
+tax_add_test(test_ode_events_grid          SOURCES events/test_grid_event.cpp)
 
 # ---- Steppers -----------------------------------------------------------
 tax_add_test(test_ode_taylor_stepper      SOURCES steppers/test_taylor.cpp)

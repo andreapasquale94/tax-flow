@@ -232,9 +232,21 @@ public:
     using T         = typename Stepper::T;
     using Config    = typename Stepper::Config;
     using Solution  = tax::ode::Solution<Stepper, State>;
-    using EventList = std::vector<Event<Stepper>>;
+    using EventPtr  = std::shared_ptr<Event<State, T>>;
+    using EventList = std::vector<EventPtr>;
 
     explicit Integrator(F f, Config cfg = {}, EventList events = {});
+
+    // Register an event; binds it to this integrator's StepEvaluator.
+    void addEvent(EventPtr e);
+
+    // Convenience factories:
+    void addStepEvent(std::string name);
+
+    template <class G>
+    void addRootFindingEvent(G g, Direction dir, std::string name, bool terminal = false);
+
+    void addGridEvent(std::vector<T> times, std::string name);
 
     [[nodiscard]] Solution integrate(const State& x0, const T& t0, const T& tmax) const;
 };
@@ -289,7 +301,10 @@ tax::ode::Verner78< Eigen::Matrix<tax::TEn<2, 4>, 6, 1> > integ_da{ f, cfg };
 
 ## Events
 
-The full event surface — `Direction`, `ControlFlow`, `TriggerContext`,
-`StepperCtx`, `Event<Stepper>`, the `EveryStep` / `ZeroCrossing` triggers, and
-the `Continue` / `Terminate` / `Record` / `Custom` actions — is covered on its
-own page: [Events](events.md).
+Events are first-class typed objects. Each subclasses `Event<State,T>` and
+implements `name()` / `onStep()` (and optionally `nextStop()`). The `Direction`
+enum (`Increasing`, `Decreasing`, `Any`) is used by `RootFindingEvent`.
+
+The three built-in events, the `StepEvaluator` extension seam, `Recorder`,
+`BaseEvent`, and user-extension patterns are all covered on their own page:
+[Events](events.md).

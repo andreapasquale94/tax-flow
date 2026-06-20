@@ -61,7 +61,7 @@ chain rule (the core machinery of [tax's recurrence relations](https://andreapas
 After $N$ evaluations of the RHS, every coefficient up to $\mathbf{x}^{[N]}$
 is exact (modulo truncation).
 
-### Per-step expansion as a `flow` callable
+### Per-step expansion as `StepEvaluator::eval(τ)`
 
 The Taylor polynomial computed at each step *is* the continuous representation
 of the solution within the step. For any $\tau \in [0, h_n]$,
@@ -70,10 +70,10 @@ $$
 \mathbf{x}(t_n + \tau) \;=\; \sum_{k=0}^{N} \mathbf{x}^{[k]} \, \tau^k
 $$
 
-evaluated with Horner via `tax::la::eval(data, τ)`. The integrator wraps this
-in the `flow(τ)` callable passed to triggers and actions, so event location
-(zero-crossing detection via Brent) operates at the full $N$-th-order accuracy
-of the method — no separate dense-output data structure is needed.
+evaluated with Horner via `tax::la::eval(data, τ)`. The integrator exposes this
+via `StepEvaluator::eval(τ)`, which events use for root-finding and
+mid-step sampling, so event location operates at the full $N$-th-order
+accuracy of the method — no separate dense-output data structure is needed.
 
 ---
 
@@ -195,30 +195,27 @@ compile error — the signature mismatches by design.
 
 ## Event location
 
-Events are expressed as a **Trigger + Action** pair (see [Events](events.md))
-and tested at every accepted step. For sign-change events of a user function
-$g(\mathbf{x}, t)$, the integrator must localise the zero inside
+Events are first-class typed objects (see [Events](events.md)) tested at every
+accepted step. For sign-change detection (`RootFindingEvent`), the integrator
+must localise a root of a user function $g(\mathbf{x}, t)$ inside
 $\tau \in [0, h_n]$.
 
-The integrator constructs a `flow(τ)` callable that returns the state at
-$t_n + \tau$, accurate to the method order:
+The integrator exposes `StepEvaluator::eval(τ)`, which returns the state at
+$t_n + \tau$ accurate to the method order:
 
 - **Taylor** (`has_step_expansion = true`): evaluates the intrinsic per-step
   expansion via `tax::la::eval(data, τ)` at full $N$-th order.
 - **RK** (`has_step_expansion = false`): performs a controller-free full-order
   re-step of size $\tau$.
 
-This callable is passed to every trigger and action through the event context
-as `ctx.flow`.
+### Brent's method on `eval(τ)`
 
-### Brent's method on `flow(τ)`
-
-`ZeroCrossing` checks the endpoint signs $g(\mathbf{x}_n, t_n)$ and
-$g(\mathbf{x}_{n+1}, t_{n+1})$. When a sign change is detected, the scalar
-function
+`RootFindingEvent` (via `StepEvaluator::findRoot`) checks the endpoint signs
+$g(\mathbf{x}_n, t_n)$ and $g(\mathbf{x}_{n+1}, t_{n+1})$. When a sign change
+is detected, the scalar function
 
 $$
-\varphi(\tau) \;=\; g\!\bigl(\mathtt{flow}(\tau),\; t_n + \tau\bigr)
+\varphi(\tau) \;=\; g\!\bigl(\mathtt{eval}(\tau),\; t_n + \tau\bigr)
 $$
 
 is handed to the `detail::brent_root` helper, which runs the Dekker–Brent

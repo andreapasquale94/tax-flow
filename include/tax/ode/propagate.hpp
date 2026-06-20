@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <memory>
 #include <tax/ode/event.hpp>
 #include <tax/ode/integrator.hpp>
 #include <tax/ode/steppers/feagin12.hpp>
@@ -112,7 +113,7 @@ using StepperT = typename StepperFor< Method, State >::type;
 template < class Method, class F, class State, class T >
 [[nodiscard]] auto propagate(
     Method, F&& rhs, const State& x0, const T& t0, const T& t1, IntegratorConfig< T > cfg = {},
-    std::vector< Event< detail::StepperT< Method, State > > > events = {} )
+    std::vector< std::shared_ptr< Event< State, T > > > events = {} )
 {
     using Stepper = detail::StepperT< Method, State >;
     Integrator< Stepper, std::decay_t< F > > integ{ std::forward< F >( rhs ), std::move( cfg ),

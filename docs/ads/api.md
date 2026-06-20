@@ -225,8 +225,9 @@ RefineDriver(Quality, Cfg, int num_threads = 1, int split_dirs = 1);
 Tree run(F&& rhs, const BoxT& ic_box, const Eigen::Matrix<T, D, 1>& ic_center, T t0, T t1);
 ```
 
-`AdsDriver`'s `extras` are extra `tax::ode::Event<Stepper>` appended to every
-box's integration.
+`AdsDriver`'s `extras` are extra `std::shared_ptr<tax::ode::Event<State,T>>`
+appended to every box's integration (deep-copied per leaf for the parallel
+driver via `clone()`).
 
 ---
 

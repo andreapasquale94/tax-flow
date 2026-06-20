@@ -9,12 +9,15 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <memory>
+#include <string>
 #include <tax/ads/box.hpp>
 #include <tax/ads/criteria.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
+#include <tax/ode/event.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
@@ -136,15 +139,26 @@ TEST( AdsDriver, ExtraUserEventIsForwarded )
     IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-10;
 
-    int step_counter = 0;
-    using ExtraEvt = std::vector< tax::ode::Event< Stepper > >;
+    // Use a shared counter so that the cloned instance (per-leaf) still
+    // increments the same tally: the driver deep-clones extras_, so the
+    // BaseEvent copy constructor must carry the shared_ptr.
+    auto counter = std::make_shared< int >( 0 );
+
+    struct CountingEvent : tax::ode::BaseEvent< CountingEvent, DAState, double >
+    {
+        std::shared_ptr< int > n;
+        explicit CountingEvent( std::shared_ptr< int > n_ ) : n( std::move( n_ ) ) {}
+        [[nodiscard]] std::string name() const override { return "count"; }
+        Action onStep( tax::ode::Recorder< DAState, double >& ) override
+        {
+            ++( *n );
+            return Action::Continue;
+        }
+    };
+
+    using ExtraEvt = AdsDriver< Stepper, TruncationCriterion >::ExtraEvt;
     ExtraEvt extras;
-    extras.emplace_back( tax::ode::EveryStep(),
-                         [&]< class Ctx, class T, class Storage >(
-                             const Ctx&, T, Storage& ) -> tax::ode::ControlFlow {
-                             ++step_counter;
-                             return tax::ode::ControlFlow::Continue;
-                         } );
+    extras.push_back( std::make_shared< CountingEvent >( counter ) );
 
     AdsDriver< Stepper, TruncationCriterion > driver{
         TruncationCriterion{ /*tol=*/1.0, /*maxDepth=*/0 },  // never split
@@ -152,5 +166,5 @@ TEST( AdsDriver, ExtraUserEventIsForwarded )
 
     auto tree = driver.run( rhs(), ic_box, center, 0.0, t1 );
     EXPECT_EQ( tree.done().size(), 1u );
-    EXPECT_GT( step_counter, 0 );
+    EXPECT_GT( *counter, 0 );
 }

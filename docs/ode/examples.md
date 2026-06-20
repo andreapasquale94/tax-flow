@@ -115,7 +115,6 @@ auto& x_nearest = sol.x[std::distance(sol.t.begin(), it)];
 
 ```cpp
 using State = Eigen::Matrix<double, 2, 1>;
-using Stepper = tax::ode::TaylorStepper<16, State>;
 
 const auto f = [](const auto& x, auto /*t*/) {
     using S = std::decay_t<decltype(x)>;
@@ -128,20 +127,19 @@ const auto f = [](const auto& x, auto /*t*/) {
 tax::ode::IntegratorConfig<double> cfg;
 cfg.abstol = cfg.reltol = 1e-12;
 
-std::vector<tax::ode::Event<Stepper>> events;
-events.emplace_back(
-    tax::ode::ZeroCrossing(
-        [](const auto& x, const auto&) { return x(0); },
-        tax::ode::Direction::Decreasing),
-    tax::ode::Terminate());
+// Use the Integrator directly so the factory can infer types from `f`.
+tax::ode::Integrator<tax::ode::TaylorStepper<16, State>, decltype(f)> integ{ f, cfg };
+integ.addRootFindingEvent(
+    [](const auto& x, auto /*t*/) { return x(0); },
+    tax::ode::Direction::Decreasing, "zero_crossing", /*terminal=*/true);
 
 State x0; x0 << 1.0, 0.0;
-auto sol = tax::ode::propagate(tax::ode::methods::Taylor<16>{}, f, x0, 0.0, 5.0, cfg, events);
+auto sol = integ.integrate(x0, 0.0, 5.0);
 
 sol.t.back();   // ≈ π/2, the first downward crossing of x(0) = cos t
 ```
 
-For a complete tour of triggers and actions, see [Events](events.md).
+For a complete tour of the event system, see [Events](events.md).
 
 ---
 
@@ -164,6 +162,6 @@ auto sol = integ.integrate(x0, 0.0, M_PI / 2);
 ## Where to look next
 
 - [Methods & Benchmarks](methods.md) — when each method earns its keep.
-- [Events](events.md) — full Trigger + Action surface, including the `Record`
-  and `Custom` actions.
+- [Events](events.md) — typed `Event<State,T>` objects, the three built-in
+  events, the `StepEvaluator` extension seam, and user-defined event patterns.
 - [API Reference](api.md) — every public name, listed.

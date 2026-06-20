@@ -42,7 +42,7 @@ methods. The user-side code is otherwise identical.
 | [Mathematical Foundations](math.md) | Taylor method, Runge–Kutta pairs, step-size controllers, root finding |
 | [API Reference](api.md) | Configuration, stepper concepts, integrator, factory functions, solution types |
 | [Methods & Benchmarks](methods.md) | When to use each method; CR3BP benchmark distilled |
-| [Events](events.md) | Trigger + Action factoring, zero-crossing detection, custom actions |
+| [Events](events.md) | Typed `Event<State,T>` objects, built-in events, `StepEvaluator`, user extension |
 | [Examples](examples.md) | End-to-end runnable examples — scalar/vector, RK/Taylor, step recording, events |
 
 ---
@@ -83,7 +83,9 @@ via the `Controller` template parameter — see
 | `tax/ode/steppers/fehlberg78.hpp` | `Fehlberg78Stepper<State, Controller>` |
 | `tax/ode/steppers/feagin12.hpp` | `Feagin12Stepper<State, Controller>` |
 | `tax/ode/steppers/feagin14.hpp` | `Feagin14Stepper<State, Controller>` |
-| `tax/ode/event.hpp`             | `Event<Stepper>`, direction & control-flow enums |
-| `tax/ode/triggers.hpp`          | `EveryStep`, `ZeroCrossing` |
-| `tax/ode/actions.hpp`           | `Continue`, `Terminate`, `Record`, `Custom` |
-| `tax/ode/integrator.hpp`        | `Integrator<Stepper, F>` |
+| `tax/ode/event.hpp`             | `Event<State,T>`, `BaseEvent`, `Recorder`, `Direction` |
+| `tax/ode/step_evaluator.hpp`    | `StepEvaluator<State,T>` — `eval`, `findRoot` |
+| `tax/ode/events/step_event.hpp` | `StepEvent<State,T>` |
+| `tax/ode/events/root_finding_event.hpp` | `RootFindingEvent<State,T,G>` |
+| `tax/ode/events/grid_event.hpp` | `GridEvent<State,T>` |
+| `tax/ode/integrator.hpp`        | `Integrator<Stepper,F>`, `addEvent`, factories |

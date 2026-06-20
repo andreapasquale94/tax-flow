@@ -2,16 +2,17 @@
 //
 // AdsDriver<Stepper, Criterion> — BFS driver around tax::ode::Integrator.
 // For each leaf in the work queue, the driver runs the integrator with
-// a (SplitTrigger, SplitAction) pair appended to any user-supplied
-// events. If the split event fires, the leaf is replaced by two
-// children with the parent's DA state re-identified on each half via
-// tax::ads::split. Otherwise the leaf is marked done with the
-// propagated DA flow map stored as its payload.
+// a SplitEvent appended to per-leaf clones of any user-supplied events.
+// If the split event fires, the leaf is replaced by two children with
+// the parent's DA state re-identified on each half via tax::ads::split.
+// Otherwise the leaf is marked done with the propagated DA flow map
+// stored as its payload.
 
 #pragma once
 
 #include <condition_variable>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
@@ -36,7 +37,7 @@ class AdsDriver
     using State = typename Stepper::State;
     using T = typename Stepper::T;
     using Cfg = typename Stepper::Config;
-    using ExtraEvt = std::vector< tax::ode::Event< Stepper > >;
+    using ExtraEvt = std::vector< std::shared_ptr< tax::ode::Event< State, T > > >;
 
     using TE = typename State::Scalar;
     static constexpr int N = TE::order_v;
@@ -100,10 +101,11 @@ class AdsDriver
                                         const BoxT& box, T t1 ) const
     {
         SplitRequest< T > req;
-        auto events = extras_;  // copy
-        events.emplace_back( SplitTrigger( crit_, depth ), SplitAction( crit_, &req ) );
-
-        tax::ode::Integrator< Stepper, std::decay_t< F > > integ{ rhs, cfg_, std::move( events ) };
+        tax::ode::Integrator< Stepper, std::decay_t< F > > integ{ rhs, cfg_ };
+        // Per-leaf independent instances of any user extras (deep clone).
+        for ( const auto& e : extras_ ) integ.addEvent( e->clone() );
+        integ.addEvent(
+            std::make_shared< SplitEvent< State, T, Criterion > >( crit_, depth, &req ) );
         auto sol = integ.integrate( payload, tEntry, t1 );
 
         // Guard against a split fired at (or beyond) the final time —

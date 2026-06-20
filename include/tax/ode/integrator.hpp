@@ -17,15 +17,18 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <tax/la.hpp>
 #include <tax/la/types.hpp>
-#include <tax/ode/actions.hpp>
 #include <tax/ode/concepts.hpp>
 #include <tax/ode/config.hpp>
 #include <tax/ode/event.hpp>
+#include <tax/ode/events/grid_event.hpp>
+#include <tax/ode/events/root_finding_event.hpp>
+#include <tax/ode/events/step_event.hpp>
 #include <tax/ode/solution.hpp>
-#include <tax/ode/triggers.hpp>
+#include <tax/ode/step_evaluator.hpp>
 #include <utility>
 #include <vector>
 
@@ -40,10 +43,13 @@ class Integrator
     using T = typename Stepper::T;
     using Config = typename Stepper::Config;
     using Solution = tax::ode::Solution< Stepper, State >;
-    using EventList = std::vector< Event< Stepper > >;
+    using EventPtr = std::shared_ptr< Event< State, T > >;
+    using EventList = std::vector< EventPtr >;
 
     explicit Integrator( F f, Config cfg = {}, EventList events = {} )
-        : f_( std::move( f ) ), cfg_( std::move( cfg ) ), events_( std::move( events ) )
+        : f_( std::move( f ) ),
+          cfg_( std::move( cfg ) ),
+          eval_( std::make_shared< detail::StepEvaluatorImpl< Stepper, F > >() )
     {
         if ( !( cfg_.abstol > T{ 0 } ) )
             throw std::invalid_argument( "IntegratorConfig: abstol must be > 0" );
@@ -53,6 +59,32 @@ class Integrator
             throw std::invalid_argument( "IntegratorConfig: max_steps must be > 0" );
         if ( cfg_.max_rejects_per_step <= 0 )
             throw std::invalid_argument( "IntegratorConfig: max_rejects_per_step must be > 0" );
+        for ( auto& e : events ) addEvent( std::move( e ) );
+    }
+
+    // Register an event; binds it to this integrator's StepEvaluator.
+    void addEvent( EventPtr e )
+    {
+        e->setEvaluator( eval_ );
+        events_.push_back( std::move( e ) );
+    }
+
+    void addStepEvent( std::string name )
+    {
+        addEvent( std::make_shared< StepEvent< State, T > >( std::move( name ) ) );
+    }
+
+    template < class G >
+    void addRootFindingEvent( G g, Direction dir, std::string name, bool terminal = false )
+    {
+        addEvent( std::make_shared< RootFindingEvent< State, T, G > >(
+            std::move( g ), dir, std::move( name ), terminal ) );
+    }
+
+    void addGridEvent( std::vector< T > times, std::string name )
+    {
+        addEvent(
+            std::make_shared< GridEvent< State, T > >( std::move( times ), std::move( name ) ) );
     }
 
     [[nodiscard]] Solution integrate( const State& x0, const T& t0, const T& tmax ) const;
@@ -60,6 +92,7 @@ class Integrator
    private:
     F f_;
     Config cfg_;
+    std::shared_ptr< detail::StepEvaluatorImpl< Stepper, F > > eval_;
     EventList events_;
 };
 
@@ -102,7 +135,7 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
                         ? cfg_.min_step
                         : std::numeric_limits< T >::epsilon() * std::abs( span ) * T{ 16 };
 
-    EventStorage< State, T > storage{ &sol.events };
+    Recorder< State, T > rec{ &sol.events };
 
     int total_steps = 0;
     bool terminate = false;
@@ -116,6 +149,15 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
 
         if ( ++total_steps > cfg_.max_steps )
             throw std::runtime_error( "Integrator::integrate: max_steps exceeded" );
+
+        // Pre-step clamp: never advance past tmax or any event's nextStop.
+        {
+            T cap = tmax - t;
+            for ( const auto& e : events_ )
+                if ( auto ns = e->nextStop( t ) )
+                    if ( *ns - t < cap ) cap = *ns - t;
+            if ( cap < h ) h = cap;
+        }
 
         int rejects = 0;
         while ( true )
@@ -141,45 +183,31 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
                 }
             }
 
-            // Per-step flow(τ) → state at t_old + τ. Capture x,t BY VALUE: the
-            // terminate branch below mutates x and t before calling flow(term_tau),
-            // so the closure must hold copies of the step-start values. r is captured
-            // by reference (alive for the whole accepted-step block).
-            auto flow = [&f = f_, x, t, &r]( T tau ) -> State {
-                if constexpr ( Stepper::has_step_expansion )
-                    return tax::la::eval( r.data, tau );
-                else
-                    return Stepper::step( f, x, t, tau );
-            };
-            FlowRef< State, T > flow_ref{ flow };
-            using Ctx = StepperCtx< Stepper, State, T >;
-            const Ctx ctx{ x, t, r.x_new, r.h_used, flow_ref };
-
-            struct Fired
+            // Refresh the shared evaluator with this accepted step, then run
+            // events in registration order. Stop at the first Terminate.
+            T term_t{};
+            State term_x{};
+            bool have_term_point = false;
+            if ( !events_.empty() )
             {
-                T tau;
-                std::size_t idx;
-            };
-            std::vector< Fired > fired;
-            fired.reserve( events_.size() );
-            for ( std::size_t i = 0; i < events_.size(); ++i )
-            {
-                auto tau = events_[i].test( ctx );
-                if ( tau ) fired.push_back( { *tau, i } );
-            }
-            std::sort( fired.begin(), fired.end(),
-                       []( const Fired& a, const Fired& b ) { return a.tau < b.tau; } );
-            // Run fired events in time order. Stop at the first one that asks to
-            // terminate: events scheduled strictly after it did not happen yet.
-            T term_tau = T{ 0 };
-            for ( const auto& fe : fired )
-            {
-                auto cf = events_[fe.idx].run( ctx, fe.tau, storage );
-                if ( cf == ControlFlow::Terminate )
+                eval_->setStep( f_, x, t, r.x_new, r.h_used, r.data );
+                for ( const auto& e : events_ )
                 {
-                    terminate = true;
-                    term_tau = fe.tau;
-                    break;
+                    const std::size_t before = rec.count();
+                    const auto act = e->onStep( rec );
+                    if ( act == Event< State, T >::Action::Terminate )
+                    {
+                        terminate = true;
+                        // Truncate at the terminating event's last record if it
+                        // emitted one; otherwise at the step boundary.
+                        if ( rec.count() > before )
+                        {
+                            term_t = sol.events.back().t;
+                            term_x = sol.events.back().x;
+                            have_term_point = true;
+                        }
+                        break;
+                    }
                 }
             }
 
@@ -188,11 +216,10 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
 
             if ( terminate )
             {
-                // Truncate at the *terminating* event's time (term_tau) — not the
-                // earliest fired event — using the per-step flow closure for a
-                // machine-precision x_term at full method order.
-                State x_term = flow( term_tau );
-                record( ctx.t_old + term_tau, x_term );
+                if ( have_term_point )
+                    record( term_t, term_x );
+                else
+                    record( t, x );
                 break;
             }
 

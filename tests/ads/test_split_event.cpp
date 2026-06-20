@@ -1,30 +1,27 @@
 // tests/ads/test_split_event.cpp
 //
-// SplitTrigger / SplitAction round-trip: fabricate a TriggerContext with
-// a known DA state, route through the trigger and action, verify the
-// SplitRequest is populated and ControlFlow::Terminate is returned.
-
+// SplitEvent: fabricate a StepEvaluator with a known DA boundary state, route
+// it through SplitEvent::onStep, verify the SplitRequest is populated and
+// Action::Terminate is returned (and that a below-tolerance state continues).
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <tax/ads/criteria.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/la/types.hpp>
-#include <tax/ode/actions.hpp>
 #include <tax/ode/event.hpp>
+#include <tax/ode/step_evaluator.hpp>
 #include <tax/tax.hpp>
 
-using tax::ads::SplitAction;
+using tax::ads::SplitEvent;
 using tax::ads::SplitRequest;
-using tax::ads::SplitTrigger;
 using tax::ads::TruncationCriterion;
-using tax::ode::ControlFlow;
-using tax::ode::EventStorage;
-using tax::ode::TriggerContext;
 
 namespace
 {
 using TE = tax::TE< 3, 2 >;
 using State = tax::la::VecNT< 2, TE >;
+using Action = tax::ode::Event< State, double >::Action;
 
 State makeQuadraticState()
 {
@@ -33,53 +30,61 @@ State makeQuadraticState()
     auto x = vars[0];
     auto y = vars[1];
     State F;
-    // x + 0.5*x^2 + x^2*y: the cubic term x^2*y gives nonzero top-degree (N=3)
-    // mass > 1e-3, so TruncationCriterion fires for the trigger test.
-    F( 0 ) = x + 0.5 * x * x + x * x * y;
+    F( 0 ) = x + 0.5 * x * x + x * x * y;  // cubic top-degree term ⇒ exceeds 1e-3
     F( 1 ) = y;
     return F;
 }
+
+// Boundary-only evaluator: eval is unused by SplitEvent.
+class BoundaryEval : public tax::ode::StepEvaluator< State, double >
+{
+   public:
+    BoundaryEval( State x_old, double t_old, State x_new, double h )
+        : x_old_( std::move( x_old ) ), x_new_( std::move( x_new ) ), t_old_( t_old ), h_( h )
+    {
+    }
+    const State& xOld() const noexcept override { return x_old_; }
+    const State& xNew() const noexcept override { return x_new_; }
+    double tOld() const noexcept override { return t_old_; }
+    double hUsed() const noexcept override { return h_; }
+    State eval( double ) const override { return x_new_; }
+
+   private:
+    State x_old_, x_new_;
+    double t_old_, h_;
+};
+
+std::shared_ptr< BoundaryEval > makeEval()
+{
+    auto s = makeQuadraticState();
+    return std::make_shared< BoundaryEval >( s, 0.0, s, 0.1 );
+}
 }  // namespace
 
-TEST( AdsSplitEvent, TriggerFiresAtBoundaryWhenCriterionAgrees )
+TEST( AdsSplitEvent, FiresAndTerminatesWhenCriterionAgrees )
 {
-    auto state = makeQuadraticState();
-    auto state2 = state;
-    // SplitTrigger/SplitAction never call flow; pass a default FlowRef.
-    TriggerContext< State, double > ctx{ state, 0.0, state2, 0.1, {} };
-
-    TruncationCriterion crit{ /*tol=*/1e-3 };
-    auto trig = SplitTrigger( crit, /*depth=*/0 );
-    auto tau = trig( ctx );
-    ASSERT_TRUE( tau.has_value() );
-    EXPECT_DOUBLE_EQ( *tau, 0.1 );
-}
-
-TEST( AdsSplitEvent, TriggerSilentBelowTol )
-{
-    auto state = makeQuadraticState();
-    auto s2 = state;
-    TriggerContext< State, double > ctx{ state, 0.0, s2, 0.1, {} };
-
-    TruncationCriterion crit{ /*tol=*/1.0 };  // nothing exceeds it
-    auto trig = SplitTrigger( crit, /*depth=*/0 );
-    auto tau = trig( ctx );
-    EXPECT_FALSE( tau.has_value() );
-}
-
-TEST( AdsSplitEvent, ActionRecordsRequestAndTerminates )
-{
-    auto state = makeQuadraticState();
-    auto s2 = state;
-    TriggerContext< State, double > ctx{ state, 0.0, s2, 0.1, {} };
-
-    TruncationCriterion crit{ /*tol=*/1e-3 };
     SplitRequest< double > req{};
-    auto act = SplitAction( crit, &req );
-    EventStorage< State, double > storage{ /*events=*/nullptr };
-    auto cf = act( ctx, /*tau=*/0.1, storage );
-    EXPECT_EQ( cf, ControlFlow::Terminate );
+    SplitEvent< State, double, TruncationCriterion > ev{ TruncationCriterion{ 1e-3 }, 0, &req };
+    ev.setEvaluator( makeEval() );
+
+    std::vector< tax::ode::EventRecord< State, double > > sink;
+    tax::ode::Recorder< State, double > rec{ &sink };
+
+    EXPECT_EQ( ev.onStep( rec ), Action::Terminate );
     EXPECT_TRUE( req.fired );
     EXPECT_EQ( req.dim, 0 );
     EXPECT_DOUBLE_EQ( req.t, 0.1 );
+}
+
+TEST( AdsSplitEvent, ContinuesBelowTolerance )
+{
+    SplitRequest< double > req{};
+    SplitEvent< State, double, TruncationCriterion > ev{ TruncationCriterion{ 1.0 }, 0, &req };
+    ev.setEvaluator( makeEval() );
+
+    std::vector< tax::ode::EventRecord< State, double > > sink;
+    tax::ode::Recorder< State, double > rec{ &sink };
+
+    EXPECT_EQ( ev.onStep( rec ), Action::Continue );
+    EXPECT_FALSE( req.fired );
 }
