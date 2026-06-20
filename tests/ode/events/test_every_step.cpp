@@ -6,11 +6,10 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <cmath>
-#include <vector>
-
+#include <tax/la/types.hpp>
 #include <tax/ode.hpp>
+#include <vector>
 
 using tax::ode::ControlFlow;
 using tax::ode::Custom;
@@ -32,13 +31,15 @@ TEST( OdeEventsEveryStep, FiresOncePerStep )
     int counter = 0;
     using Stepper = TaylorStepper< N, State >;
     std::vector< Event< Stepper > > events;
-    events.emplace_back(
-        EveryStep(),
-        Custom( [&counter]( const auto&, double, auto& )
-                { ++counter; return ControlFlow::Continue; } ) );
+    events.emplace_back( EveryStep(), Custom( [&counter]( const auto&, double, auto& ) {
+                             ++counter;
+                             return ControlFlow::Continue;
+                         } ) );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) > integ{ f, cfg, events };
-    State x0; x0( 0 ) = 1.0;
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
+    State x0;
+    x0( 0 ) = 1.0;
     auto sol = integ.integrate( x0, 0.0, 1.0 );
 
     // Counter should equal the number of accepted steps == sol.size() - 1.
@@ -58,17 +59,15 @@ TEST( OdeEventsEveryStep, CustomCanTerminate )
 
     using Stepper = TaylorStepper< N, State >;
     std::vector< Event< Stepper > > events;
-    events.emplace_back(
-        EveryStep(),
-        Custom( []( const auto& ctx, double, auto& )
-                {
-                    return ( ctx.t_old + ctx.h_used > 0.3 )
-                               ? ControlFlow::Terminate
-                               : ControlFlow::Continue;
-                } ) );
+    events.emplace_back( EveryStep(), Custom( []( const auto& ctx, double, auto& ) {
+                             return ( ctx.t_old + ctx.h_used > 0.3 ) ? ControlFlow::Terminate
+                                                                     : ControlFlow::Continue;
+                         } ) );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) > integ{ f, cfg, events };
-    State x0; x0( 0 ) = 1.0;
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
+    State x0;
+    x0( 0 ) = 1.0;
     auto sol = integ.integrate( x0, 0.0, 1.0 );
 
     EXPECT_LT( sol.t.back(), 1.0 );

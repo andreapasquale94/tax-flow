@@ -82,9 +82,12 @@ and integrate once:
 ```cpp
 constexpr int P = 6;
 
+tax::ode::IntegratorConfig< double > cfg;
+cfg.abstol = cfg.reltol = 1e-13;
+cfg.save_steps = true;   // keep every accepted step boundary
+
 auto x0_da = tax::ads::create< P, 4 >( ic_box, icCenter() );
-auto sol   = tax::ode::propagate< /*Dense=*/true >(
-    Verner89{}, rhs(), x0_da, 0.0, /*t_final=*/3.0, cfg );
+auto sol   = tax::ode::propagate( Verner89{}, rhs(), x0_da, 0.0, /*t_final=*/3.0, cfg );
 ```
 
 ![IC box escaping L1 along the unstable manifold](img/three_body_flow.png)

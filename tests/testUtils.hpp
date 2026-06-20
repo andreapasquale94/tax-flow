@@ -1,5 +1,6 @@
 #pragma once
 #include <gtest/gtest.h>
+
 #include <tax/tax.hpp>
 
 namespace tax::test
@@ -20,8 +21,7 @@ inline void ExpectCoeffsNear( const TE& actual, const TE& expected, double tol =
     ASSERT_EQ( actual.nCoefficients, expected.nCoefficients );
     for ( std::size_t k = 0; k < actual.nCoefficients; ++k )
     {
-        EXPECT_NEAR( actual[k], expected[k], tol )
-            << "Coefficient mismatch at flat index " << k;
+        EXPECT_NEAR( actual[k], expected[k], tol ) << "Coefficient mismatch at flat index " << k;
     }
 }
 

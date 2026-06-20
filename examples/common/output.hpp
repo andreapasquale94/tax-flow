@@ -48,6 +48,23 @@
 namespace example
 {
 
+// ---- Sampling ---------------------------------------------------------------
+// n_points evenly-spaced times in [t0, t1] (n_points == 1 ⇒ just {t0}).
+[[nodiscard]] inline std::vector< double > linspace( double t0, double t1, int n_points )
+{
+    std::vector< double > out;
+    if ( n_points <= 0 ) return out;
+    out.reserve( static_cast< std::size_t >( n_points ) );
+    if ( n_points == 1 )
+    {
+        out.push_back( t0 );
+        return out;
+    }
+    const double step = ( t1 - t0 ) / ( n_points - 1 );
+    for ( int i = 0; i < n_points; ++i ) out.push_back( t0 + i * step );
+    return out;
+}
+
 // ---- Timing -----------------------------------------------------------------
 class Stopwatch
 {
@@ -55,8 +72,8 @@ class Stopwatch
     Stopwatch() : start_( std::chrono::steady_clock::now() ) {}
     [[nodiscard]] double ms() const
     {
-        return std::chrono::duration< double, std::milli >( std::chrono::steady_clock::now()
-                                                            - start_ )
+        return std::chrono::duration< double, std::milli >( std::chrono::steady_clock::now() -
+                                                            start_ )
             .count();
     }
 
@@ -92,10 +109,22 @@ inline std::vector< std::array< double, 2 > > unitSquareBoundary( int n_per_edge
             double a = 0.0, b = 0.0;
             switch ( edge )
             {
-                case 0: a = -1.0 + 2.0 * s; b = +1.0;            break;
-                case 1: a = +1.0;           b = +1.0 - 2.0 * s;  break;
-                case 2: a = +1.0 - 2.0 * s; b = -1.0;            break;
-                case 3: a = -1.0;           b = -1.0 + 2.0 * s;  break;
+                case 0:
+                    a = -1.0 + 2.0 * s;
+                    b = +1.0;
+                    break;
+                case 1:
+                    a = +1.0;
+                    b = +1.0 - 2.0 * s;
+                    break;
+                case 2:
+                    a = +1.0 - 2.0 * s;
+                    b = -1.0;
+                    break;
+                case 3:
+                    a = -1.0;
+                    b = -1.0 + 2.0 * s;
+                    break;
             }
             pts.push_back( { a, b } );
         }
@@ -126,9 +155,8 @@ struct Snapshot
  * to the M-dimensional normalised displacement (problem-specific).
  */
 template < class StateVec, class ToBox >
-Polygon evalPolygon( const StateVec& state,
-                     const std::vector< std::array< double, 2 > >& boundary, ToBox&& toBox,
-                     int id = 0, int depth = 0 )
+Polygon evalPolygon( const StateVec& state, const std::vector< std::array< double, 2 > >& boundary,
+                     ToBox&& toBox, int id = 0, int depth = 0 )
 {
     Polygon p;
     p.id = id;
@@ -171,17 +199,18 @@ struct OrbitSamples
     std::vector< std::vector< double > > cols;  // cols[j][i] = x_j(t_i)
 };
 
-/// Sample a Dense solution on `times` into per-component columns.
+/// Build per-component columns from the accepted-step grid of a Solution.
+/// Requires cfg.save_steps == true (the default). The `times` parameter
+/// is ignored — the stored grid is used directly.
 template < class Sol >
-OrbitSamples sampleOrbit( const Sol& sol, const std::vector< double >& times, int dim )
+OrbitSamples sampleOrbit( const Sol& sol, const std::vector< double >& /*times*/, int dim )
 {
     OrbitSamples s;
-    s.t = times;
-    s.cols.assign( static_cast< std::size_t >( dim ),
-                   std::vector< double >( times.size() ) );
-    for ( std::size_t i = 0; i < times.size(); ++i )
+    s.t = sol.t;
+    s.cols.assign( static_cast< std::size_t >( dim ), std::vector< double >( sol.t.size() ) );
+    for ( std::size_t i = 0; i < sol.t.size(); ++i )
     {
-        const auto x = sol( times[i] );
+        const auto& x = sol.x[i];
         for ( int j = 0; j < dim; ++j ) s.cols[std::size_t( j )][i] = x( j );
     }
     return s;
@@ -276,7 +305,7 @@ inline void printBanner( std::string_view title, const BannerRows& rows )
 {
     constexpr std::size_t label_w = 18;
     std::cout << "\n=== " << title << " ===\n";
-    for ( const auto& [ label, value ] : rows )
+    for ( const auto& [label, value] : rows )
     {
         const std::size_t pad = label.size() < label_w ? label_w - label.size() : 0;
         std::cout << "  " << std::string( pad, ' ' ) << label << " : " << value << '\n';

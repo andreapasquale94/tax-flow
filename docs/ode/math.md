@@ -61,17 +61,19 @@ chain rule (the core machinery of [tax's recurrence relations](https://andreapas
 After $N$ evaluations of the RHS, every coefficient up to $\mathbf{x}^{[N]}$
 is exact (modulo truncation).
 
-### Dense output, for free
+### Per-step expansion as a `flow` callable
 
-The Taylor polynomial computed at each step *is* the continuous extension. For
-any $t \in [t_n, t_{n+1}]$,
+The Taylor polynomial computed at each step *is* the continuous representation
+of the solution within the step. For any $\tau \in [0, h_n]$,
 
 $$
-\mathbf{x}(t) \;=\; \sum_{k=0}^{N} \mathbf{x}^{[k]} \, (t - t_n)^k
+\mathbf{x}(t_n + \tau) \;=\; \sum_{k=0}^{N} \mathbf{x}^{[k]} \, \tau^k
 $$
 
-evaluated with Horner. Unlike RK steppers (which fall back to cubic-Hermite),
-the Taylor dense output reproduces the method's full $N$-th-order accuracy.
+evaluated with Horner via `tax::la::eval(data, τ)`. The integrator wraps this
+in the `flow(τ)` callable passed to triggers and actions, so event location
+(zero-crossing detection via Brent) operates at the full $N$-th-order accuracy
+of the method — no separate dense-output data structure is needed.
 
 ---
 
@@ -105,13 +107,14 @@ The shipped pairs:
 | Feagin 12(10) | 12 | 10 | 25 | Feagin 2007 |
 | Feagin 14(12) | 14 | 12 | 35 | Feagin 2010 |
 
-### Dense output (RK)
+### Event location for RK steppers
 
-The shipped RK steppers wrap a **cubic-Hermite** continuous extension using
-the boundary states $(\mathbf{x}_n, \mathbf{x}_{n+1})$ and their derivatives
-$(\mathbf{f}_n, \mathbf{f}_{n+1})$. This is sufficient for event location
-(Brent on samples), but the dense reconstruction is only third-order — the
-`has_dense_output = false` flag on the stepper documents that fact.
+RK steppers have `has_step_expansion = false` and carry no continuous extension
+in `StepData`. For event location the integrator performs a controller-free
+full-order re-step of size $\tau$ — identical to a normal step with $h = \tau$,
+but skipping the error estimate and step-size controller. This gives
+method-order accurate samples at any query time, which Brent's method uses to
+bracket and refine the zero crossing.
 
 ---
 
@@ -195,39 +198,35 @@ compile error — the signature mismatches by design.
 Events are expressed as a **Trigger + Action** pair (see [Events](events.md))
 and tested at every accepted step. For sign-change events of a user function
 $g(\mathbf{x}, t)$, the integrator must localise the zero inside
-$\tau \in [0, h_n]$. Two strategies ship:
+$\tau \in [0, h_n]$.
 
-### Polynomial-Newton with bisection safeguard (Taylor path)
+The integrator constructs a `flow(τ)` callable that returns the state at
+$t_n + \tau$, accurate to the method order:
 
-If the user wrote a *generic* `g(const auto& x, const auto& t)`, the Taylor
-stepper composes it with the per-step state polynomial to obtain
+- **Taylor** (`has_step_expansion = true`): evaluates the intrinsic per-step
+  expansion via `tax::la::eval(data, τ)` at full $N$-th order.
+- **RK** (`has_step_expansion = false`): performs a controller-free full-order
+  re-step of size $\tau$.
+
+This callable is passed to every trigger and action through the event context
+as `ctx.flow`.
+
+### Brent's method on `flow(τ)`
+
+`ZeroCrossing` checks the endpoint signs $g(\mathbf{x}_n, t_n)$ and
+$g(\mathbf{x}_{n+1}, t_{n+1})$. When a sign change is detected, the scalar
+function
 
 $$
-g_{\text{poly}}(\tau) \;=\; g\!\left(\sum_k \mathbf{x}^{[k]} \tau^k,\; t_n + \tau\right) \in \text{tax::TE}_{N,1}
+\varphi(\tau) \;=\; g\!\bigl(\mathtt{flow}(\tau),\; t_n + \tau\bigr)
 $$
 
-valid on the entire accepted step. The root is then found by **safeguarded
-Newton**:
+is handed to the `detail::brent_root` helper, which runs the Dekker–Brent
+algorithm (inverse quadratic interpolation with bisection fallback) on the
+bracketed interval $[0, h_n]$. The result is derivative-free and
+superlinearly convergent.
 
-1. Bracket from the boundary signs $g_{\text{poly}}(0)$, $g_{\text{poly}}(h_n)$.
-2. Newton step $\tau_{k+1} = \tau_k - g_{\text{poly}}(\tau_k)/g_{\text{poly}}'(\tau_k)$.
-3. Reject the Newton step and bisect if it falls outside the bracket or does
-   not at least halve $|\Delta\tau|$ per iteration.
-4. Tighten the bracket using the new sample's sign.
-5. Stop when $|\tau_{\text{hi}} - \tau_{\text{lo}}| \le 16\,\varepsilon\,(1 + |\tau_{\text{mid}}|)$.
-
-Converges in 3–6 iterations to ULP precision in typical cases; fallback to
-bisection-only in pathological cases.
-
-### Brent's method (RK path)
-
-RK steppers expose only scalar samples via `eval_dense`. The shared
-`detail::brent_root` helper runs the Dekker–Brent algorithm (inverse quadratic
-interpolation with bisection fallback) on the bracketed sign change.
-Derivative-free, superlinearly convergent, used uniformly by every RK
-stepper's `find_zero`.
-
-Both paths return `std::optional<T>`; `std::nullopt` means the safeguard
+`brent_root` returns `std::optional<T>`; `std::nullopt` means the safeguard
 refused to converge and the event silently skips that step.
 
 ---

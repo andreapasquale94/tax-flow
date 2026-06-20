@@ -42,8 +42,8 @@ TEST( OdeEventsZeroCrossing, HarmonicTerminateAtZero )
         ZeroCrossing( []( const auto& x, const auto& ) { return x( 0 ); }, Direction::Decreasing ),
         Terminate() );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) >
-        integ{ f, cfg, events };
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
     State x0;
     x0( 0 ) = 1.0;
     x0( 1 ) = 0.0;
@@ -76,8 +76,8 @@ TEST( OdeEventsZeroCrossing, HarmonicVZeroRecord )
         ZeroCrossing( []( const auto& x, const auto& ) { return x( 1 ); }, Direction::Any ),
         Record( "v_zero" ) );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) >
-        integ{ f, cfg, events };
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
     State x0;
     x0( 0 ) = 1.0;
     x0( 1 ) = 0.0;
@@ -92,9 +92,8 @@ TEST( OdeEventsZeroCrossing, HarmonicVZeroRecord )
     {
         EXPECT_GE( e.t, 0.0 );
         EXPECT_LE( e.t, 2 * M_PI + 1e-9 );
-        // The event *time* is found via polynomial Newton (near machine
-        // precision). Record now uses Stepper::eval_dense so the recorded
-        // x is machine-precision accurate — tighten to the spec's 1e-8.
+        // The event time is found via Brent on flow(τ). Record uses
+        // flow(τ) for the recorded state — accurate to method order.
         EXPECT_NEAR( std::abs( e.x( 1 ) ), 0.0, 1e-8 );
     }
 }
@@ -130,8 +129,8 @@ TEST( OdeEventsZeroCrossing, TerminationUsesTerminatingEventTime )
                                        Direction::Increasing ),
                          Terminate() );
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) >
-        integ{ f, cfg, events };
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
     State x0;
     x0( 0 ) = 0.0;
     auto sol = integ.integrate( x0, 0.0, 3.0 );
@@ -158,8 +157,8 @@ TEST( OdeEventsZeroCrossing, EmptyEventListRunsToTmax )
     using Stepper = TaylorStepper< N, State >;
     std::vector< Event< Stepper > > events;  // empty
 
-    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, false, decltype( f ) >
-        integ{ f, cfg, events };
+    tax::ode::Taylor< N, State, tax::ode::controllers::JorbaZou< double >, decltype( f ) > integ{
+        f, cfg, events };
     State x0;
     x0( 0 ) = 1.0;
     auto sol = integ.integrate( x0, 0.0, 1.0 );
@@ -187,9 +186,9 @@ TEST( OdeEventsZeroCrossing, HarmonicTerminateAcrossAllMethods )
     x0( 1 ) = 0.0;
     const double tmax = 5.0;
     const double t_expected = M_PI / 2;
-    // Verner78/89 and Fehlberg78 achieve ~1e-7 via Brent-on-Hermite.
-    // Feagin12/14's sparse error tables produce slightly larger step sizes
-    // near the event, so their Brent bracket is coarser; 1e-6 covers all five.
+    // All RK methods use Brent on full-order re-steps (step). Accuracy
+    // is determined by the step size at event time and Brent convergence;
+    // 1e-6 covers all five methods comfortably.
     const double tol = 1e-6;
 
     {

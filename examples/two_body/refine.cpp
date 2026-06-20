@@ -31,6 +31,7 @@
 // Writes: refine.json   (animate with examples/two_body/plot_refine.py)
 // =============================================================================
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -41,7 +42,6 @@
 #include <string>
 #include <tax/ads.hpp>
 #include <tax/ode.hpp>
-#include <tax/ode/io.hpp>
 #include <vector>
 
 #include "common.hpp"
@@ -131,13 +131,14 @@ int main( int argc, char** argv )
     tax::ode::IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-12;
 
-    const auto snap_times = tax::ode::linspace( 0.0, t_final, kNSnaps );
+    const auto snap_times = example::linspace( 0.0, t_final, kNSnaps );
     const auto boundary = unitSquareBoundary( kNPerEdge );
 
+    cfg.save_steps = true;
+
     // ---- Scalar centerpoint orbit (plot underlay) ----------------------------
-    auto ref_sol = tax::ode::propagate< /*Dense=*/true >( Taylor< 16 >{}, rhs(), icCenter(), 0.0,
-                                                          t_final, cfg );
-    const auto reference = sampleOrbit( ref_sol, tax::ode::linspace( 0.0, t_final, 200 ), D );
+    auto ref_sol = tax::ode::propagate( Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
+    const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
 
     // ---- Monte-Carlo reference cloud -----------------------------------------
     // Uniform samples of the IC box, each propagated densely so we can show
@@ -151,8 +152,7 @@ int main( int argc, char** argv )
         tax::la::VecNT< D, double > ic = icCenter();
         ic( kAxisY ) += half_y * unit( rng );
         ic( kAxisVy ) += half_v * unit( rng );
-        auto sol =
-            tax::ode::propagate< /*Dense=*/true >( Verner89{}, rhs(), ic, 0.0, t_final, cfg );
+        auto sol = tax::ode::propagate( Verner89{}, rhs(), ic, 0.0, t_final, cfg );
 
         McSample m;
         m.ic = ic;
@@ -160,7 +160,15 @@ int main( int argc, char** argv )
         m.truth_y.reserve( snap_times.size() );
         for ( double t : snap_times )
         {
-            const auto x = sol( t );
+            // Find the stored step closest to t.
+            auto it = std::lower_bound( sol.t.begin(), sol.t.end(), t );
+            if ( it == sol.t.end() ) --it;
+            if ( it != sol.t.begin() )
+            {
+                auto prev = std::prev( it );
+                if ( t - *prev < *it - t ) it = prev;
+            }
+            const auto& x = sol.x[static_cast< std::size_t >( it - sol.t.begin() )];
             m.truth_x.push_back( x( 0 ) );
             m.truth_y.push_back( x( 1 ) );
         }
@@ -197,12 +205,22 @@ int main( int argc, char** argv )
                 const auto& leaf = tree.leaf( li );
                 if ( collectSnapshots )
                 {
-                    auto sol = tax::ode::propagate< /*Dense=*/true >(
-                        Verner89{}, rhs(), leafInit( leaf.box ), 0.0, t_final, cfg );
+                    auto sol = tax::ode::propagate( Verner89{}, rhs(), leafInit( leaf.box ), 0.0,
+                                                    t_final, cfg );
                     for ( std::size_t si = 0; si < snap_times.size(); ++si )
                     {
-                        auto poly = evalPolygon( sol( snap_times[si] ), boundary, boundaryToBox, id,
-                                                 leaf.depth );
+                        // Find the stored step closest to snap_times[si].
+                        const double tq = snap_times[si];
+                        auto it2 = std::lower_bound( sol.t.begin(), sol.t.end(), tq );
+                        if ( it2 == sol.t.end() ) --it2;
+                        if ( it2 != sol.t.begin() )
+                        {
+                            auto prev = std::prev( it2 );
+                            if ( tq - *prev < *it2 - tq ) it2 = prev;
+                        }
+                        const auto& x_snap =
+                            sol.x[static_cast< std::size_t >( it2 - sol.t.begin() )];
+                        auto poly = evalPolygon( x_snap, boundary, boundaryToBox, id, leaf.depth );
                         if ( si + 1 == snap_times.size() ) it.area += polygonArea( poly );
                         it.snapshots[si].leaves.push_back( std::move( poly ) );
                     }

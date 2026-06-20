@@ -95,15 +95,32 @@ constexpr int P = 6;   // truncation order
 constexpr int M = 4;   // number of expansion variables
 
 auto x0_da = tax::ads::create< P, M >( ic_box, icCenter() );   // s0 + h.*xi
-auto sol   = tax::ode::propagate< /*Dense=*/true >(
-    Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
+tax::ode::IntegratorConfig< double > cfg;
+cfg.abstol = cfg.reltol = 1e-12;
+cfg.save_steps = true;   // keep every accepted step boundary
 
-// evaluate the flow polynomial anywhere in the box, at any time:
-double x_img = sol( t )( 0 ).eval( xi );   // xi in [-1,1]^4
+auto sol = tax::ode::propagate( Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
 ```
 
-`Dense=true` stores the continuous extension, so `sol(t)` interpolates the
-polynomial flow map at *any* time, not just at step boundaries.
+With `save_steps = true` (the default) the full accepted-step grid is stored in
+`sol.t` / `sol.x`. To query the flow polynomial at a snapshot time, find the
+stored step whose time is closest:
+
+```cpp
+auto stateAt = [&sol]( double t_query ) {
+    auto it = std::lower_bound( sol.t.begin(), sol.t.end(), t_query );
+    if ( it == sol.t.end() ) return sol.x.back();
+    if ( it == sol.t.begin() ) return sol.x.front();
+    auto prev = std::prev( it );
+    std::size_t idx = ( t_query - *prev < *it - t_query )
+                          ? static_cast<std::size_t>( prev - sol.t.begin() )
+                          : static_cast<std::size_t>( it  - sol.t.begin() );
+    return sol.x[idx];
+};
+
+// evaluate the flow polynomial at a snapshot time:
+double x_img = stateAt( t )( 0 ).eval( xi );   // xi in [-1,1]^4
+```
 
 To visualize the map, we trace the boundary of the box's \((y, v_y)\)-face
 and evaluate the \((x, y)\) components of \(\Phi_t\) along it at nine

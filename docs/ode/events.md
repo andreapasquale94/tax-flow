@@ -11,8 +11,10 @@ using tax::ode::Direction;
 using tax::ode::Event;
 using tax::ode::ZeroCrossing;
 using tax::ode::Terminate;
+using namespace tax::ode::methods;
 
-using Stepper = tax::ode::TaylorStepper<16, Eigen::Matrix<double, 2, 1>>;
+using State = Eigen::Matrix<double, 2, 1>;
+using Stepper = tax::ode::TaylorStepper<16, State>;
 std::vector<Event<Stepper>> events;
 
 events.emplace_back(
@@ -20,8 +22,8 @@ events.emplace_back(
                  Direction::Decreasing),
     Terminate());
 
-auto integ = tax::ode::makeTaylorIntegrator<16, double, 2>(f, cfg, events);
-auto sol = integ.integrate(x0, 0.0, 5.0);
+tax::ode::IntegratorConfig<double> cfg;
+auto sol = tax::ode::propagate(Taylor<16>{}, f, x0, 0.0, 5.0, cfg, events);
 // sol.t.back() = the time at which x(0) crossed 0 downward.
 ```
 
@@ -63,16 +65,17 @@ inside the most recent step. `dir` is one of:
 | `Decreasing` | $g$ goes from positive to negative |
 | `Any`        | either of the above |
 
-**Root finding strategy** is method-specific (see
-[Mathematical Foundations](math.md#event-location)):
+**Root finding strategy** (see [Mathematical Foundations](math.md#event-location)):
 
-- The TaylorStepper composes a *generic* `g(const auto& x, const auto& t)` with
-  the per-step time polynomial to obtain a univariate TE `g_poly(τ)`, then runs
-  safeguarded polynomial-Newton. Converges in 3–6 iterations to ULP precision.
-- RK steppers (Verner, Fehlberg, Feagin) use Brent on scalar samples via
-  `Stepper::eval_dense`. Derivative-free, superlinear.
-- Non-generic `g` (e.g. a `std::function`) on the Taylor path falls back to
-  Brent on samples — no error, just slightly slower.
+After confirming a sign change between step boundaries, `ZeroCrossing` runs
+Brent's method on scalar samples drawn from a `flow(τ)` callable provided by
+the integrator. `flow(τ)` returns the state at `t_old + τ` via:
+
+- **Taylor** (`has_step_expansion = true`): evaluates the intrinsic per-step
+  time-Taylor expansion at full $N$-th order — `tax::la::eval(data, τ)`.
+- **RK** (`has_step_expansion = false`): performs a controller-free full-order
+  re-step of size `τ` — accurate to the method order, not a low-order
+  approximation.
 
 **Multi-root caveat.** Both paths are *single-root, bracketed*: they find the
 earliest zero between step boundaries when the boundary signs disagree, and
@@ -98,9 +101,9 @@ ControlFlow(const StepperCtx<…>&, T tau_fired, EventStorage<State, T>&)
 | `Record(label)`    | Push `EventRecord{label, t, x}` into the solution's `events` vector, then continue. |
 | `Custom(fn)`       | Invoke a user lambda `fn(ctx, τ, storage) -> ControlFlow`. The storage exposes `push(EventRecord)` for writes. |
 
-The `Record` action uses `Stepper::eval_dense` to obtain `x` at the located
-τ. On the TaylorStepper this gives machine-precision accuracy when `g_poly`
-was used by the trigger.
+The `Record` action evaluates `ctx.flow(τ)` to obtain `x` at the located τ,
+using the same integrator-provided `flow` callable as `ZeroCrossing` — accurate
+to the method order for both Taylor and RK steppers.
 
 ---
 
@@ -145,9 +148,9 @@ events.emplace_back(
         tax::ode::Direction::Increasing),
     tax::ode::Record("periapsis"));
 
-auto integ = tax::ode::makeTaylorIntegrator<16, double, 2>(f, cfg, events);
 Eigen::Matrix<double, 2, 1> x0; x0 << 1.0, 0.0;
-auto sol = integ.integrate(x0, 0.0, 4.0 * M_PI);
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<16>{}, f, x0,
+                               0.0, 4.0 * M_PI, cfg, events);
 
 for (const auto& e : sol.events) {
     std::cout << e.label << " at t = " << e.t << "\n";
@@ -157,10 +160,22 @@ for (const auto& e : sol.events) {
 ### Same on a Verner 8(7) integrator (Brent root finder, otherwise identical)
 
 ```cpp
-auto integ = tax::ode::makeVerner78Integrator<double, 2>(f, cfg, events);
-auto sol = integ.integrate(x0, 0.0, 4.0 * M_PI);
+// Events must be typed for the matching stepper.
+using State78 = Eigen::Matrix<double, 2, 1>;
+using Stepper78 = tax::ode::Verner78Stepper<State78>;
+std::vector<tax::ode::Event<Stepper78>> events78;
+events78.emplace_back(
+    tax::ode::ZeroCrossing([](const auto& x, const auto&) { return x(1); },
+                           tax::ode::Direction::Decreasing),
+    tax::ode::Record("apoapsis"));
+events78.emplace_back(
+    tax::ode::ZeroCrossing([](const auto& x, const auto&) { return x(1); },
+                           tax::ode::Direction::Increasing),
+    tax::ode::Record("periapsis"));
+
+auto sol = tax::ode::propagate(tax::ode::methods::Verner78{}, f, x0,
+                               0.0, 4.0 * M_PI, cfg, events78);
 ```
 
-The user-facing event list is the same — the trigger's `Stepper::find_zero`
-routes through Brent automatically because Verner steppers don't expose a
-polynomial dense output.
+The user-facing event machinery is identical — `ZeroCrossing` routes through
+Brent on `flow(τ)` for all steppers, Taylor and RK alike.

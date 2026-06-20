@@ -9,12 +9,12 @@ controllers.
 
 | Method | Strength | Pay attention to | Default controller |
 |---|---|---|---|
-| **Verner 8(7)**   | Best speed/accuracy balance in the RK family for smooth problems at $10^{-12}$ | Cubic-Hermite dense output | `PI` |
+| **Verner 8(7)**   | Best speed/accuracy balance in the RK family for smooth problems at $10^{-12}$ | Event location via full-order re-step | `PI` |
 | **Verner 9(8)**   | Precision champion at moderate cost | 16 stages — more RHS evals per step | `PI` |
 | **Fehlberg 7(8)** | Classical baseline, well understood | The "Fehlberg coincidence" can zero the embedded estimate on certain steps | `PI` |
 | **Feagin 12(10)** | Very high order for smooth astrodynamics | Sparse error indicator — only stages 2 and $n-1$ contribute | `PI` |
 | **Feagin 14(12)** | Highest order available | Even more sparse error contribution; expensive | `PI` |
-| **Taylor (`N`)**  | Exact polynomial-Newton event location, exact dense output | Per-step cost grows roughly $\mathcal{O}(N^2)$; 30–100× slower than RK on smooth astro problems | `JorbaZou` |
+| **Taylor (`N`)**  | Accurate event location via intrinsic per-step expansion (full $N$-th order) | Per-step cost grows roughly $\mathcal{O}(N^2)$; 30–100× slower than RK on smooth astro problems | `JorbaZou` |
 
 ---
 
@@ -90,8 +90,8 @@ Cost grows roughly linearly with $N$ (~0.45 ms / order beyond $N=12$).
 Endpoint error becomes dominated by the abstol-tied step-size controller
 rather than truncation around $N=16$. The Taylor method is 30–100× slower
 than RK on this problem at this tolerance — its advantage is qualitative:
-exact polynomial-Newton event location and exact $N$-th-order dense
-output. None of those features show up in raw wall-time.
+accurate event location via its intrinsic per-step time-expansion at full
+$N$-th order. None of those features show up in raw wall-time.
 
 ### Taylor + alternate controllers
 
@@ -110,10 +110,10 @@ that JorbaZou exploits.
 
 - **Default choice for smooth problems**: Verner 8(7) + PI.
 - **Precision-priority**: Verner 9(8) + PI.
-- **Need polynomial event location or exact dense output**: TaylorStepper, even
-  at the wall-time cost. Use it when the *qualitative* properties of the
-  polynomial form matter (continuous functionals, multi-root detection in
-  future versions, ADS integration in Stage 2b).
+- **Need highly accurate event location**: TaylorStepper, even at the wall-time
+  cost. Its intrinsic per-step expansion delivers full $N$-th-order accuracy when
+  locating zero crossings — useful when the *qualitative* properties of the
+  polynomial form matter (continuous functionals, ADS integration).
 - **Step-size controller defaults are sane**: don't reach for H211b unless you
   measured a benefit on your actual problem.
 

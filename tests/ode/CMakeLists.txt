@@ -26,9 +26,9 @@ tax_add_test(test_ode_named_state    SOURCES test_named_state.cpp)
 tax_add_test(test_ode_rk_helpers     SOURCES test_rk_helpers.cpp)
 
 # ---- Integrator driver --------------------------------------------------
-tax_add_test(test_ode_integrator_basic   SOURCES integrator/test_basic.cpp)
-tax_add_test(test_ode_integrator_dense   SOURCES integrator/test_dense.cpp)
-tax_add_test(test_ode_integrator_static  SOURCES integrator/test_static.cpp)
+tax_add_test(test_ode_integrator_basic      SOURCES integrator/test_basic.cpp)
+tax_add_test(test_ode_integrator_static     SOURCES integrator/test_static.cpp)
+tax_add_test(test_ode_integrator_save_steps SOURCES integrator/test_save_steps.cpp)
 
 # ---- Events -------------------------------------------------------------
 tax_add_test(test_ode_events_zero_crossing SOURCES events/test_zero_crossing.cpp)

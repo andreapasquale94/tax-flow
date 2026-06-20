@@ -82,10 +82,9 @@ MergeStats merge( AdsTree< Payload, M, T >& tree, Criterion crit )
             // Determine which of the pair is left and which is right by
             // comparing box centers: the child with the lower center along
             // dim is the left child (shift = +1 for left, -1 for right).
-            const int leftIdx = ( tree.leaf( li ).box.center( dim ) <
-                                  tree.leaf( sib ).box.center( dim ) )
-                                    ? li
-                                    : sib;
+            const int leftIdx =
+                ( tree.leaf( li ).box.center( dim ) < tree.leaf( sib ).box.center( dim ) ) ? li
+                                                                                           : sib;
             const int rightIdx = ( leftIdx == li ) ? sib : li;
 
             // Reconstruct parent by inverting the split substitution

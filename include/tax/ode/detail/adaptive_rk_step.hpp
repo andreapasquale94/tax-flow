@@ -10,11 +10,10 @@
 #include <array>
 #include <concepts>
 #include <cstddef>
-#include <type_traits>
-#include <utility>
-
 #include <tax/ode/controllers.hpp>
 #include <tax/ode/vector_ops.hpp>
+#include <type_traits>
+#include <utility>
 
 namespace tax::ode::detail
 {
@@ -28,33 +27,30 @@ struct RKStepData
 template < class State >
 struct RKStepOut
 {
-    State  x_new;
-    State  y_emb;
-    double err_norm;                       // always double
+    State x_new;
+    State y_emb;
+    double err_norm;  // always double
 };
 
 template < class Tab, class F, class State, int NStages >
-[[nodiscard]] RKStepOut< State > adaptive_rk_step(
-    F&& f, const State& x, double t, double h,
-    RKStepData< State, NStages >& work )
+[[nodiscard]] RKStepOut< State > adaptive_rk_step( F&& f, const State& x, double t, double h,
+                                                   RKStepData< State, NStages >& work )
 {
     static_assert( NStages == Tab::n_stages,
                    "adaptive_rk_step: stage-count mismatch with tableau" );
 
     using Ops = VectorOps< State >;
 
-    work.k[ 0 ] = f( x, t + Tab::c[ 0 ] * h );
+    work.k[0] = f( x, t + Tab::c[0] * h );
 
     std::size_t a_off = 0;
     State y = x;  // hoisted stage accumulator (reassigned per stage)
     for ( int i = 1; i < NStages; ++i )
     {
-        if ( i > 1 )
-            y = x;
+        if ( i > 1 ) y = x;
         for ( int j = 0; j < i; ++j )
-            Ops::axpy( y, h * Tab::a[ a_off + std::size_t( j ) ],
-                       work.k[ std::size_t( j ) ] );
-        work.k[ std::size_t( i ) ] = f( y, t + Tab::c[ std::size_t( i ) ] * h );
+            Ops::axpy( y, h * Tab::a[a_off + std::size_t( j )], work.k[std::size_t( j )] );
+        work.k[std::size_t( i )] = f( y, t + Tab::c[std::size_t( i )] * h );
         a_off += std::size_t( i );
     }
 
@@ -62,10 +58,8 @@ template < class Tab, class F, class State, int NStages >
     State y_emb = x;
     for ( int i = 0; i < NStages; ++i )
     {
-        Ops::axpy( x_new, h * Tab::b    [ std::size_t( i ) ],
-                   work.k[ std::size_t( i ) ] );
-        Ops::axpy( y_emb, h * Tab::b_emb[ std::size_t( i ) ],
-                   work.k[ std::size_t( i ) ] );
+        Ops::axpy( x_new, h * Tab::b[std::size_t( i )], work.k[std::size_t( i )] );
+        Ops::axpy( y_emb, h * Tab::b_emb[std::size_t( i )], work.k[std::size_t( i )] );
     }
 
     // Error norm |x_new - y_emb|_inf, without materializing the difference
@@ -76,8 +70,7 @@ template < class Tab, class F, class State, int NStages >
                    } )
     {
         err_norm = Ops::diff_norm( x_new, y_emb );
-    }
-    else
+    } else
     {
         State diff = x_new;
         Ops::axpy( diff, -1.0, y_emb );
@@ -109,30 +102,26 @@ template < class Tab, class F, class State, int NStages >
  * @param order_emb      Embedded estimator order (Tab::order_emb).
  */
 template < class Controller >
-[[nodiscard]] inline std::pair< double, bool > select_rk_step(
-    Controller& controller,
-    double      h,
-    double      err_for_ctrl,
-    double      err_norm,
-    double      tol,
-    int         order_emb )
+[[nodiscard]] inline std::pair< double, bool > select_rk_step( Controller& controller, double h,
+                                                               double err_for_ctrl, double err_norm,
+                                                               double tol, int order_emb )
 {
-    static_assert(
-        !std::is_same_v< Controller, controllers::JorbaZou< double > >,
-        "JorbaZou is a Taylor-method controller (it needs the last two "
-        "time-Taylor coefficient magnitudes). Use it only with TaylorStepper, "
-        "not with the RK steppers." );
+    static_assert( !std::is_same_v< Controller, controllers::JorbaZou< double > >,
+                   "JorbaZou is a Taylor-method controller (it needs the last two "
+                   "time-Taylor coefficient magnitudes). Use it only with TaylorStepper, "
+                   "not with the RK steppers." );
 
     if constexpr ( std::is_same_v< Controller, controllers::FixedStep< double > > )
     {
-        (void) controller; (void) err_for_ctrl; (void) err_norm;
-        (void) tol; (void) order_emb;
+        (void)controller;
+        (void)err_for_ctrl;
+        (void)err_norm;
+        (void)tol;
+        (void)order_emb;
         return { h, true };
-    }
-    else
+    } else
     {
-        return { controller.next_step( h, err_for_ctrl, tol, order_emb ),
-                 err_norm <= tol };
+        return { controller.next_step( h, err_for_ctrl, tol, order_emb ), err_norm <= tol };
     }
 }
 
@@ -151,30 +140,27 @@ template < class Controller >
  * `N` is the Taylor stepper's compile-time time order.
  */
 template < int N, class Controller >
-[[nodiscard]] inline std::pair< double, bool > select_taylor_step(
-    Controller& controller,
-    double      h,
-    double      c_N_norm,
-    double      c_Nm1_norm,
-    double      err_norm,
-    double      tol )
+[[nodiscard]] inline std::pair< double, bool > select_taylor_step( Controller& controller, double h,
+                                                                   double c_N_norm,
+                                                                   double c_Nm1_norm,
+                                                                   double err_norm, double tol )
 {
     if constexpr ( std::is_same_v< Controller, controllers::FixedStep< double > > )
     {
-        (void) controller; (void) c_N_norm; (void) c_Nm1_norm;
-        (void) err_norm;   (void) tol;
+        (void)controller;
+        (void)c_N_norm;
+        (void)c_Nm1_norm;
+        (void)err_norm;
+        (void)tol;
         return { h, true };
-    }
-    else if constexpr ( std::is_same_v< Controller, controllers::JorbaZou< double > > )
+    } else if constexpr ( std::is_same_v< Controller, controllers::JorbaZou< double > > )
     {
-        return { controller.next_step( h, c_N_norm, c_Nm1_norm, tol, N ),
-                 err_norm <= tol };
-    }
-    else
+        return { controller.next_step( h, c_N_norm, c_Nm1_norm, tol, N ), err_norm <= tol };
+    } else
     {
-        (void) c_N_norm; (void) c_Nm1_norm;
-        return { controller.next_step( h, err_norm, tol, /*p_emb=*/N - 1 ),
-                 err_norm <= tol };
+        (void)c_N_norm;
+        (void)c_Nm1_norm;
+        return { controller.next_step( h, err_norm, tol, /*p_emb=*/N - 1 ), err_norm <= tol };
     }
 }
 

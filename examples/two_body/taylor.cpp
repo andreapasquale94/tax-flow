@@ -4,10 +4,9 @@
 // Step 1 — One multivariate Taylor flow polynomial over the IC box.
 //
 // A DA-valued state (an Eigen vector of TaylorExpansions, seeded as
-// ic_center + halfWidth * xi) is integrated once with Dense=true. The
-// result is a polynomial flow map: at any time t, sol(t) is a vector of
-// polynomials in xi whose value at a point of [-1, 1]^M is the propagated
-// state of the corresponding IC point.
+// ic_center + halfWidth * xi) is integrated once. The result is a
+// polynomial flow map: at each snapshot time we retrieve the accepted-step
+// state whose time is closest to the snapshot time.
 //
 // At 9 snapshot times along one orbit we evaluate the (x, y) components
 // on the boundary of the IC box's (y, vy)-face. The closed polygons show
@@ -17,9 +16,9 @@
 // Writes: taylor.json   (plot with examples/plot/plot_two_body.py)
 // =============================================================================
 
+#include <algorithm>
 #include <tax/ads/da_state.hpp>
 #include <tax/ode.hpp>
-#include <tax/ode/io.hpp>
 
 #include "common.hpp"
 
@@ -33,32 +32,43 @@ int main()
     constexpr int M = 4;  // number of DA variables (state dimension here)
     constexpr int D = 4;  // state dimension
 
-    constexpr int kNSnaps   = 9;   // 0, pi/4, ..., 2 pi (every 45 deg)
+    constexpr int kNSnaps = 9;     // 0, pi/4, ..., 2 pi (every 45 deg)
     constexpr int kNPerEdge = 24;  // boundary samples per square edge
-    const double  t_final   = kPeriod;
+    const double t_final = kPeriod;
 
     const auto ic_box = icBox();
 
     tax::ode::IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-12;
+    cfg.save_steps = true;
 
-    // ---- One dense DA propagation over the whole interval -------------------
-    auto      x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
+    // ---- One DA propagation over the whole interval -------------------------
+    auto x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
     Stopwatch clock;
-    auto      sol = tax::ode::propagate< /*Dense=*/true >(
-        Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
+    auto sol = tax::ode::propagate( Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
     const double elapsed_ms = clock.ms();
 
     // ---- Scalar centerpoint orbit (plot underlay) ----------------------------
-    auto ref_sol = tax::ode::propagate< /*Dense=*/true >(
-        Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
-    const auto reference = sampleOrbit( ref_sol, tax::ode::linspace( 0.0, t_final, 200 ), D );
+    auto ref_sol = tax::ode::propagate( Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
+    const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
+
+    // Helper: find stored step with t closest to t_query.
+    auto stateAt = [&sol]( double t_query ) -> decltype( sol.x.front() ) {
+        auto it = std::lower_bound( sol.t.begin(), sol.t.end(), t_query );
+        if ( it == sol.t.end() ) return sol.x.back();
+        if ( it == sol.t.begin() ) return sol.x.front();
+        auto prev = std::prev( it );
+        const std::size_t idx = ( t_query - *prev < *it - t_query )
+                                    ? static_cast< std::size_t >( prev - sol.t.begin() )
+                                    : static_cast< std::size_t >( it - sol.t.begin() );
+        return sol.x[idx];
+    };
 
     // ---- Evaluate the flow polynomial on the box boundary per snapshot ------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
-    for ( double t : tax::ode::linspace( 0.0, t_final, kNSnaps ) )
-        snapshots.push_back( { t, { evalPolygon( sol( t ), boundary, boundaryToBox ) } } );
+    for ( double t : example::linspace( 0.0, t_final, kNSnaps ) )
+        snapshots.push_back( { t, { evalPolygon( stateAt( t ), boundary, boundaryToBox ) } } );
 
     // ---- Output ---------------------------------------------------------------
     writeRunJson( "taylor.json", "taylor",

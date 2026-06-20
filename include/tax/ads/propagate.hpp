@@ -18,14 +18,13 @@
 
 #pragma once
 
-#include <type_traits>
-#include <utility>
-
 #include <tax/ads/box.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/propagate.hpp>
+#include <type_traits>
+#include <utility>
 
 namespace tax::ads
 {
@@ -35,7 +34,7 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
                               const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
                               tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1 )
 {
-    using TE      = tax::TaylorExpansion< T, P, M, tax::storage::Dense >;
+    using TE = tax::TaylorExpansion< T, P, M, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
     using Stepper = tax::ode::detail::StepperT< Method, DAState >;
 

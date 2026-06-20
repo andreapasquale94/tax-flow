@@ -22,13 +22,12 @@
 
 #pragma once
 
-#include <tax/la/types.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <type_traits>
-
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/la/types.hpp>
+#include <type_traits>
 
 namespace tax::ode
 {
@@ -46,15 +45,9 @@ struct VectorOps< T >
         return std::abs( static_cast< double >( x ) );
     }
 
-    static void axpy( T& y, double a, T x ) noexcept
-    {
-        y += static_cast< T >( a ) * x;
-    }
+    static void axpy( T& y, double a, T x ) noexcept { y += static_cast< T >( a ) * x; }
 
-    static void scale_assign( T& y, double a, T x ) noexcept
-    {
-        y = static_cast< T >( a ) * x;
-    }
+    static void scale_assign( T& y, double a, T x ) noexcept { y = static_cast< T >( a ) * x; }
 
     [[nodiscard]] static double diff_norm( T a, T b ) noexcept
     {
@@ -79,15 +72,13 @@ struct VectorOps< TaylorExpansion< T, N, M, storage::Dense > >
     static void axpy( S& y, double a, const S& x ) noexcept
     {
         const T s = static_cast< T >( a );
-        for ( std::size_t i = 0; i < S::nCoefficients; ++i )
-            y[i] += s * x[i];
+        for ( std::size_t i = 0; i < S::nCoefficients; ++i ) y[i] += s * x[i];
     }
 
     static void scale_assign( S& y, double a, const S& x ) noexcept
     {
         const T s = static_cast< T >( a );
-        for ( std::size_t i = 0; i < S::nCoefficients; ++i )
-            y[i] = s * x[i];
+        for ( std::size_t i = 0; i < S::nCoefficients; ++i ) y[i] = s * x[i];
     }
 
     [[nodiscard]] static double diff_norm( const S& a, const S& b ) noexcept
@@ -103,29 +94,25 @@ struct VectorOps< TaylorExpansion< T, N, M, storage::Dense > >
 template < class T, int D >
 struct VectorOps< Eigen::Matrix< T, D, 1 > >
 {
-    using V     = Eigen::Matrix< T, D, 1 >;
+    using V = Eigen::Matrix< T, D, 1 >;
     using Inner = VectorOps< T >;
 
     [[nodiscard]] static double norm( const V& x ) noexcept
     {
         double n = 0.0;
-        for ( Eigen::Index i = 0; i < x.size(); ++i )
-            n = std::max( n, Inner::norm( x( i ) ) );
+        for ( Eigen::Index i = 0; i < x.size(); ++i ) n = std::max( n, Inner::norm( x( i ) ) );
         return n;
     }
 
     static void axpy( V& y, double a, const V& x )
     {
-        for ( Eigen::Index i = 0; i < x.size(); ++i )
-            Inner::axpy( y( i ), a, x( i ) );
+        for ( Eigen::Index i = 0; i < x.size(); ++i ) Inner::axpy( y( i ), a, x( i ) );
     }
 
     static void scale_assign( V& y, double a, const V& x )
     {
-        if ( y.size() != x.size() )
-            y.resize( x.size() );
-        for ( Eigen::Index i = 0; i < x.size(); ++i )
-            Inner::scale_assign( y( i ), a, x( i ) );
+        if ( y.size() != x.size() ) y.resize( x.size() );
+        for ( Eigen::Index i = 0; i < x.size(); ++i ) Inner::scale_assign( y( i ), a, x( i ) );
     }
 
     [[nodiscard]] static double diff_norm( const V& a, const V& b ) noexcept

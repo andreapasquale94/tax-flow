@@ -22,11 +22,10 @@
 
 #include <array>
 #include <cmath>
-#include <utility>
-
 #include <tax/ads/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
+#include <utility>
 
 #include "../common/output.hpp"
 
@@ -39,10 +38,10 @@ using example::unitSquareBoundary;
 using example::writeJsonArray;
 
 // ---- Orbit constants -------------------------------------------------------
-inline constexpr double kEcc        = 0.5;
-inline constexpr double kPeriapsis  = 1.0 - kEcc;                 // x(0)
-inline const     double kVPeriapsis = std::sqrt( ( 1.0 + kEcc ) / ( 1.0 - kEcc ) );
-inline const     double kPeriod     = 2.0 * M_PI;
+inline constexpr double kEcc = 0.5;
+inline constexpr double kPeriapsis = 1.0 - kEcc;  // x(0)
+inline const double kVPeriapsis = std::sqrt( ( 1.0 + kEcc ) / ( 1.0 - kEcc ) );
+inline const double kPeriod = 2.0 * M_PI;
 
 // ---- Right-hand side -------------------------------------------------------
 //
@@ -52,19 +51,18 @@ inline const     double kPeriod     = 2.0 * M_PI;
 // ADL picks up tax::sqrt for TE; <cmath> provides ::sqrt for double.
 inline auto rhs()
 {
-    return []( const auto& s, const auto& /*t*/ )
-    {
-        using S       = std::decay_t< decltype( s ) >;
-        const auto x  = s( 0 );
-        const auto y  = s( 1 );
+    return []( const auto& s, const auto& /*t*/ ) {
+        using S = std::decay_t< decltype( s ) >;
+        const auto x = s( 0 );
+        const auto y = s( 1 );
         const auto r2 = x * x + y * y;
-        const auto r3 = r2 * sqrt( r2 );    // r^3 = r^2 * r
+        const auto r3 = r2 * sqrt( r2 );  // r^3 = r^2 * r
 
         S out;
-        out( 0 ) =  s( 2 );      // dx/dt  = vx
-        out( 1 ) =  s( 3 );      // dy/dt  = vy
-        out( 2 ) = -x / r3;      // dvx/dt = -x/r^3
-        out( 3 ) = -y / r3;      // dvy/dt = -y/r^3
+        out( 0 ) = s( 2 );   // dx/dt  = vx
+        out( 1 ) = s( 3 );   // dy/dt  = vy
+        out( 2 ) = -x / r3;  // dvx/dt = -x/r^3
+        out( 3 ) = -y / r3;  // dvy/dt = -y/r^3
         return out;
     };
 }
@@ -94,9 +92,6 @@ inline tax::ads::Box< double, 4 > icBox()
 //
 // The box varies along axes 1 (y) and 3 (vy); the two boundary coordinates
 // map there and the pinned axes get 0.
-inline std::array< double, 4 > boundaryToBox( double a, double b )
-{
-    return { 0.0, a, 0.0, b };
-}
+inline std::array< double, 4 > boundaryToBox( double a, double b ) { return { 0.0, a, 0.0, b }; }
 
 }  // namespace example::two_body

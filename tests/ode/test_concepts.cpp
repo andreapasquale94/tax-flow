@@ -8,9 +8,8 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <functional>
-
+#include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
 namespace
@@ -23,25 +22,22 @@ using State = tax::la::VecNT< 1, double >;
 // AdaptiveStepper.
 struct FakeStepper
 {
-    using T         = double;
-    using State     = ::State;
-    using Config    = tax::ode::IntegratorConfig< T >;
-    using Rhs       = std::function< State( const State&, T ) >;
-    using DenseData = State;
+    using T = double;
+    using State = ::State;
+    using Config = tax::ode::IntegratorConfig< T >;
+    using Rhs = std::function< State( const State&, T ) >;
+    using StepData = State;
 
-    tax::ode::StepResult< State, FakeStepper >
-    step( const Rhs& /*f*/, const State& x, T /*t*/, T h, const Config& /*cfg*/ ) const
+    static constexpr bool has_step_expansion = true;
+
+    tax::ode::StepResult< State, FakeStepper > step( const Rhs& /*f*/, const State& x, T /*t*/, T h,
+                                                     const Config& /*cfg*/ ) const
     {
         tax::ode::StepResult< State, FakeStepper > r;
         r.x_new = x;
         r.h_used = h;
-        r.dense = x;
+        r.data = x;
         return r;
-    }
-
-    static State eval_dense( const DenseData& d, const T& /*t0*/, const T& /*tq*/ )
-    {
-        return d;
     }
 };
 
@@ -54,30 +50,26 @@ static_assert( !tax::ode::concepts::AdaptiveStepper< FakeStepper >,
 // `is_adaptive` marker, so AdaptiveStepper<FakeAdaptiveStepper> holds.
 struct FakeAdaptiveStepper
 {
-    using State     = ::State;
-    using T         = double;
-    using Config    = tax::ode::IntegratorConfig< T >;
-    using Rhs       = std::function< State( const State&, T ) >;
-    using DenseData = State;
+    using State = ::State;
+    using T = double;
+    using Config = tax::ode::IntegratorConfig< T >;
+    using Rhs = std::function< State( const State&, T ) >;
+    using StepData = State;
 
     static constexpr bool is_adaptive = true;
+    static constexpr bool has_step_expansion = true;
 
-    tax::ode::StepResult< State, FakeAdaptiveStepper >
-    step( const Rhs&, const State& x, T, T h, const Config& ) const
+    tax::ode::StepResult< State, FakeAdaptiveStepper > step( const Rhs&, const State& x, T, T h,
+                                                             const Config& ) const
     {
         tax::ode::StepResult< State, FakeAdaptiveStepper > r;
-        r.x_new   = x;
-        r.h_used  = h;
-        r.dense   = x;
-        r.h_next  = h;
+        r.x_new = x;
+        r.h_used = h;
+        r.data = x;
+        r.h_next = h;
         r.err_norm = T{ 0 };
         r.accepted = true;
         return r;
-    }
-
-    static State eval_dense( const DenseData& d, const T&, const T& )
-    {
-        return d;
     }
 };
 

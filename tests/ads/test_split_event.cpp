@@ -23,16 +23,15 @@ using tax::ode::TriggerContext;
 
 namespace
 {
-using TE        = tax::TE< 3, 2 >;
-using State     = tax::la::VecNT< 2, TE >;
-using DenseData = State;   // any matrix-of-TE works as fake DenseData
+using TE = tax::TE< 3, 2 >;
+using State = tax::la::VecNT< 2, TE >;
 
 State makeQuadraticState()
 {
     Eigen::Vector2d p{ 0.0, 0.0 };
     auto vars = tax::la::variables< TE >( p );
-    auto x = vars[ 0 ];
-    auto y = vars[ 1 ];
+    auto x = vars[0];
+    auto y = vars[1];
     State F;
     // x + 0.5*x^2 + x^2*y: the cubic term x^2*y gives nonzero top-degree (N=3)
     // mass > 1e-3, so TruncationCriterion fires for the trigger test.
@@ -44,41 +43,39 @@ State makeQuadraticState()
 
 TEST( AdsSplitEvent, TriggerFiresAtBoundaryWhenCriterionAgrees )
 {
-    auto    state  = makeQuadraticState();
-    auto    state2 = state;
-    DenseData dense = state;
-    TriggerContext< State, double, DenseData > ctx{ state, 0.0, state2, 0.1, dense };
+    auto state = makeQuadraticState();
+    auto state2 = state;
+    // SplitTrigger/SplitAction never call flow; pass a default FlowRef.
+    TriggerContext< State, double > ctx{ state, 0.0, state2, 0.1, {} };
 
     TruncationCriterion crit{ /*tol=*/1e-3 };
-    auto                trig = SplitTrigger( crit, /*depth=*/0 );
-    auto                tau  = trig( ctx );
+    auto trig = SplitTrigger( crit, /*depth=*/0 );
+    auto tau = trig( ctx );
     ASSERT_TRUE( tau.has_value() );
     EXPECT_DOUBLE_EQ( *tau, 0.1 );
 }
 
 TEST( AdsSplitEvent, TriggerSilentBelowTol )
 {
-    auto      state = makeQuadraticState();
-    auto      s2    = state;
-    DenseData dense = state;
-    TriggerContext< State, double, DenseData > ctx{ state, 0.0, s2, 0.1, dense };
+    auto state = makeQuadraticState();
+    auto s2 = state;
+    TriggerContext< State, double > ctx{ state, 0.0, s2, 0.1, {} };
 
-    TruncationCriterion crit{ /*tol=*/1.0 };   // nothing exceeds it
-    auto                trig = SplitTrigger( crit, /*depth=*/0 );
-    auto                tau  = trig( ctx );
+    TruncationCriterion crit{ /*tol=*/1.0 };  // nothing exceeds it
+    auto trig = SplitTrigger( crit, /*depth=*/0 );
+    auto tau = trig( ctx );
     EXPECT_FALSE( tau.has_value() );
 }
 
 TEST( AdsSplitEvent, ActionRecordsRequestAndTerminates )
 {
-    auto      state = makeQuadraticState();
-    auto      s2    = state;
-    DenseData dense = state;
-    TriggerContext< State, double, DenseData > ctx{ state, 0.0, s2, 0.1, dense };
+    auto state = makeQuadraticState();
+    auto s2 = state;
+    TriggerContext< State, double > ctx{ state, 0.0, s2, 0.1, {} };
 
     TruncationCriterion crit{ /*tol=*/1e-3 };
     SplitRequest< double > req{};
-    auto                  act = SplitAction( crit, &req );
+    auto act = SplitAction( crit, &req );
     EventStorage< State, double > storage{ /*events=*/nullptr };
     auto cf = act( ctx, /*tau=*/0.1, storage );
     EXPECT_EQ( cf, ControlFlow::Terminate );

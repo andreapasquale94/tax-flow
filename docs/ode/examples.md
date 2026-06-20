@@ -14,10 +14,8 @@ auto f = [](const auto& x, auto /*t*/) { return x; };
 tax::ode::IntegratorConfig<double> cfg;
 cfg.abstol = cfg.reltol = 1e-12;
 
-auto integ = tax::ode::makeTaylorIntegrator<16, double, 1>(f, cfg);
-
 Eigen::Matrix<double, 1, 1> x0{1.0};
-auto sol = integ.integrate(x0, /*t0=*/0.0, /*tmax=*/1.0);
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<16>{}, f, x0, 0.0, 1.0, cfg);
 
 sol.x.back()(0);   // ≈ e = 2.7182818…
 ```
@@ -39,10 +37,8 @@ auto f = [](const auto& x, auto /*t*/) {
 tax::ode::IntegratorConfig<double> cfg;
 cfg.abstol = cfg.reltol = 1e-12;
 
-auto integ = tax::ode::makeTaylorIntegrator<12, double, 2>(f, cfg);
-
 Eigen::Matrix<double, 2, 1> x0{1.0, 0.0};
-auto sol = integ.integrate(x0, 0.0, M_PI / 2);
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<12>{}, f, x0, 0.0, M_PI / 2, cfg);
 
 sol.x.back();      // ≈ (0, -1) — quarter period
 ```
@@ -51,16 +47,14 @@ sol.x.back();      // ≈ (0, -1) — quarter period
 
 ## Same problem with a Verner 9(8) stepper
 
-The user code differs only in the factory call.
+The user code differs only in the method tag.
 
 ```cpp
-auto integ = tax::ode::makeVerner89Integrator<double, 2>(f, cfg);
-auto sol   = integ.integrate(x0, 0.0, M_PI / 2);
+auto sol = tax::ode::propagate(tax::ode::methods::Verner89{}, f, x0, 0.0, M_PI / 2, cfg);
 ```
 
-Replace `makeVerner89Integrator` with `makeVerner78Integrator`,
-`makeFehlberg78Integrator`, `makeFeagin12Integrator`, or
-`makeFeagin14Integrator` to swap RK pairs.
+Replace `Verner89{}` with `Verner78{}`, `Fehlberg78{}`, `Feagin12{}`, or
+`Feagin14{}` to swap RK pairs.
 
 ---
 
@@ -77,33 +71,43 @@ const auto f = [](const auto& x, auto /*t*/) {
     return out;
 };
 
-auto integ = tax::ode::makeTaylorIntegrator<14>(f);
 State x0(1);
 x0(0) = 1.0;
-
-auto sol = integ.integrate(x0, 0.0, 1.0);
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<14>{}, f, x0, 0.0, 1.0);
 ```
-
-`makeTaylorIntegrator<N>` (no `T`, `D`, `Dense` overrides) defaults to
-`T = double`, `D = Eigen::Dynamic`, `Dense = false`.
 
 ---
 
-## Dense output
+## Step recording
 
-Setting `Dense = true` opts into per-step continuous-extension storage and
-unlocks `sol(t)` for any `t ∈ [t0, tmax]`.
+By default (`cfg.save_steps = true`) the solution stores every accepted step
+boundary in `sol.t` / `sol.x`. Set `save_steps = false` to keep only the
+initial and final states — useful when only the endpoint or event records matter
+and memory is a concern.
 
 ```cpp
-auto integ = tax::ode::makeTaylorIntegrator<16, double, 1, /*Dense=*/true>(f, cfg);
-auto sol = integ.integrate(x0, 0.0, 1.0);
+tax::ode::IntegratorConfig<double> cfg;
+cfg.save_steps = false;   // keep only (t0, x0) and (tmax, x_final)
 
-double xq = sol(0.37)(0);   // value at t = 0.37 via Horner on the per-step TE
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<16>{}, f, x0, 0.0, 1.0, cfg);
+
+sol.x.back()(0);   // final state — same value regardless of save_steps
+sol.t.size();      // 2 (initial + final)
 ```
 
-For RK steppers, `sol(t)` falls back to cubic-Hermite — third-order
-accurate, fine for plotting and event location but not the method's full
-order.
+Events are **always** recorded in `sol.events` regardless of `save_steps`.
+
+To query the state at intermediate times, keep `save_steps = true` and
+binary-search the stored grid:
+
+```cpp
+cfg.save_steps = true;
+auto sol = tax::ode::propagate(tax::ode::methods::Verner89{}, f, x0, 0.0, 1.0, cfg);
+
+// Find the stored step closest to t = 0.37.
+auto it = std::lower_bound(sol.t.begin(), sol.t.end(), 0.37);
+auto& x_nearest = sol.x[std::distance(sol.t.begin(), it)];
+```
 
 ---
 
@@ -131,10 +135,8 @@ events.emplace_back(
         tax::ode::Direction::Decreasing),
     tax::ode::Terminate());
 
-auto integ = tax::ode::makeTaylorIntegrator<16, double, 2, /*Dense=*/false>(
-    f, cfg, events);
 State x0; x0 << 1.0, 0.0;
-auto sol = integ.integrate(x0, 0.0, 5.0);
+auto sol = tax::ode::propagate(tax::ode::methods::Taylor<16>{}, f, x0, 0.0, 5.0, cfg, events);
 
 sol.t.back();   // ≈ π/2, the first downward crossing of x(0) = cos t
 ```
@@ -151,9 +153,10 @@ factory:
 
 ```cpp
 using tax::ode::controllers::H211b;
+using State = Eigen::Matrix<double, 2, 1>;
 
-auto integ = tax::ode::makeVerner89Integrator<
-    double, /*D=*/2, /*Dense=*/false, H211b<double>>(f, cfg);
+tax::ode::Verner89<State, H211b<double>> integ{ f, cfg };
+auto sol = integ.integrate(x0, 0.0, M_PI / 2);
 ```
 
 ---

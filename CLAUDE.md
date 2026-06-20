@@ -48,29 +48,26 @@ tax-flow/
 │   ├── ode.hpp               # Facade: ODE integration module (tax::ode)
 │   ├── ads.hpp               # Facade: Automatic Domain Splitting (tax::ads)
 │   ├── ode/                  # Adaptive ODE integration (namespace tax::ode)
-│   │   ├── propagate.hpp     #   propagate<Dense>(method, rhs, x0, t0, t1, cfg, events)
-│   │   ├── integrator.hpp    #   Integrator<Stepper, F, Dense> driver
+│   │   ├── propagate.hpp     #   propagate(method, rhs, x0, t0, t1, cfg, events)
+│   │   ├── integrator.hpp    #   Integrator<Stepper, F> driver
 │   │   ├── config.hpp        #   IntegratorConfig<T>
 │   │   ├── controllers.hpp   #   I, PI, H211b, JorbaZou, FixedStep
 │   │   ├── steppers/         #   taylor.hpp + five per-method RK headers
 │   │   ├── detail/           #   embedded_rk_stepper + Butcher tableaus, root-finders
-│   │   ├── solution.hpp      #   Solution<Stepper, State, Dense> (dense output)
+│   │   ├── solution.hpp      #   Solution<Stepper, State> (step grid + events)
 │   │   ├── event.hpp / triggers.hpp / actions.hpp
 │   │   ├── vector_ops.hpp    #   VectorOps<S> trait (scalar / TE / Eigen states)
-│   │   ├── named.hpp         #   VectorOps for tax::named expansions as ODE state
-│   │   └── io.hpp            #   linspace, writeCsv (opt-in)
+│   │   └── named.hpp         #   VectorOps for tax::named expansions as ODE state
 │   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
 │       ├── box.hpp, leaf.hpp, tree.hpp
 │       ├── criteria.hpp      #   SplitCriterion, TruncationCriterion, NliCriterion
 │       ├── nonlinearity_index.hpp, split_event.hpp, da_state.hpp
 │       ├── driver.hpp, propagate.hpp, merge.hpp
-│       ├── refine.hpp, refine_criteria.hpp
-│       └── io.hpp            #   CSV writers (opt-in)
+│       └── refine.hpp, refine_criteria.hpp
 ├── tests/                    # Google Test suite
 │   ├── ode/                  #   steppers/, integrator/, events/, problems/ (CR3BP, Kepler)
 │   ├── ads/                  #   box, tree, criteria, driver, merge, parallel, refine
 │   └── testUtils.hpp         #   shared helpers/macros
-├── benchmarks/               # Google Benchmark suite (bench_ode_cr3bp, bench_ads_refine)
 ├── examples/                 # two_body/, three_body/, wsb/ — Taylor, ADS, LOADS
 │   ├── common/output.hpp     #   shared I/O scaffolding (JSON schema, banners)
 │   └── plot/                 #   matplotlib scripts rendering the JSON outputs
@@ -96,7 +93,6 @@ ctest --test-dir build --output-on-failure
 | Option | Default | Description |
 |--------|---------|-------------|
 | `TAXFLOW_BUILD_UNITTESTS` | `ON`  | Build Google Test unit-test suite |
-| `TAXFLOW_BUILD_BENCHMARK` | `OFF` | Build Google Benchmark suite |
 | `TAXFLOW_BUILD_EXAMPLES`  | `OFF` | Build example programs under `examples/` |
 | `TAX_SOURCE_DIR`          | `../tax` | `tax` source tree (used only when `tax` is not installed) |
 
@@ -104,7 +100,6 @@ ctest --test-dir build --output-on-failure
 
 - **Required:** `tax` (find_package or sibling source), Eigen3, Threads (both via `tax`)
 - **Test framework:** Google Test v1.17 — fetched automatically if not found
-- **Benchmark framework:** Google Benchmark v1.9 — fetched when `TAXFLOW_BUILD_BENCHMARK=ON`
 
 ---
 

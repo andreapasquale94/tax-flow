@@ -18,7 +18,6 @@
 
 #include <tax/ads.hpp>
 #include <tax/ode.hpp>
-#include <tax/ode/io.hpp>
 
 #include "common.hpp"
 
@@ -32,9 +31,9 @@ int main()
     constexpr int M = 4;  // number of DA variables
     constexpr int D = 4;  // state dimension
 
-    constexpr int kNSnaps   = 9;
+    constexpr int kNSnaps = 9;
     constexpr int kNPerEdge = 24;
-    const double  t_final   = kPeriod;
+    const double t_final = kPeriod;
 
     const auto ic_box = icBox();
 
@@ -45,27 +44,27 @@ int main()
     // mass at total degree P exceeds tol.
     const tax::ads::TruncationCriterion criterion{ /*tol=*/1e-6, /*maxDepth=*/8 };
 
+    cfg.save_steps = true;
+
     // ---- Scalar centerpoint orbit (plot underlay) ----------------------------
-    auto ref_sol = tax::ode::propagate< /*Dense=*/true >(
-        Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
-    const auto reference = sampleOrbit( ref_sol, tax::ode::linspace( 0.0, t_final, 200 ), D );
+    auto ref_sol = tax::ode::propagate( Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
+    const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
 
     // ---- One ADS propagation per snapshot time -------------------------------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
-    Stopwatch   clock;
-    for ( double t : tax::ode::linspace( 0.0, t_final, kNSnaps ) )
+    Stopwatch clock;
+    for ( double t : example::linspace( 0.0, t_final, kNSnaps ) )
     {
         Snapshot snap{ t, {} };
         if ( t <= 0.0 )
         {
             snap.leaves.push_back( boxPolygon( ic_box, boundary, boundaryToBox ) );
-        }
-        else
+        } else
         {
-            auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), ic_box,
-                                                  icCenter(), 0.0, t, cfg, adsThreads() );
+            auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), ic_box, icCenter(),
+                                                  0.0, t, cfg, adsThreads() );
             int id = 0;
             for ( int li : tree.done() )
             {
@@ -74,8 +73,7 @@ int main()
                     evalPolygon( leaf.payload, boundary, boundaryToBox, id++, leaf.depth ) );
             }
         }
-        leaf_counts += ( leaf_counts.empty() ? "" : ", " )
-                       + std::to_string( snap.leaves.size() );
+        leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( snap.leaves.size() );
         snapshots.push_back( std::move( snap ) );
     }
     const double elapsed_ms = clock.ms();

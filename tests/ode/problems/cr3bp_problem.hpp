@@ -33,34 +33,33 @@
 
 #pragma once
 
-#include <tax/la/types.hpp>
 #include <cmath>
-
+#include <tax/la/types.hpp>
 
 namespace tax::ode::test
 {
 
-constexpr double kCR3BPMu  = 0.01215058560962404;   // Earth–Moon
-constexpr double kCR3BPL1  = 0.8369180073407246;
-constexpr double kCR3BPL2  = 1.1556824692238923;
+constexpr double kCR3BPMu = 0.01215058560962404;  // Earth–Moon
+constexpr double kCR3BPL1 = 0.8369180073407246;
+constexpr double kCR3BPL2 = 1.1556824692238923;
 
 using CR3BPState = tax::la::VecNT< 4, double >;
 
 inline auto cr3bp_rhs( double mu = kCR3BPMu )
 {
-    return [mu]( const auto& s, const auto& /*t*/ ) -> std::decay_t< decltype( s ) >
-    {
+    return [mu]( const auto& s, const auto& /*t*/ ) -> std::decay_t< decltype( s ) > {
         using S = std::decay_t< decltype( s ) >;
         using V = typename S::Scalar;
+        using std::sqrt;  // double → std::sqrt; TaylorExpansion → tax::sqrt via ADL
 
         S out;
-        const V x  = s( 0 );
-        const V y  = s( 1 );
+        const V x = s( 0 );
+        const V y = s( 1 );
         const V vx = s( 2 );
         const V vy = s( 3 );
 
-        const V x1   = x + V( mu );
-        const V x2   = x - V( 1.0 - mu );
+        const V x1 = x + V( mu );
+        const V x2 = x - V( 1.0 - mu );
         const V r1_2 = x1 * x1 + y * y;
         const V r2_2 = x2 * x2 + y * y;
         const V r1_3 = r1_2 * sqrt( r1_2 );
@@ -68,12 +67,8 @@ inline auto cr3bp_rhs( double mu = kCR3BPMu )
 
         out( 0 ) = vx;
         out( 1 ) = vy;
-        out( 2 ) =  V( 2 ) * vy + x
-                   - V( 1.0 - mu ) * x1 / r1_3
-                   - V( mu )       * x2 / r2_3;
-        out( 3 ) = -V( 2 ) * vx + y
-                   - V( 1.0 - mu ) * y  / r1_3
-                   - V( mu )       * y  / r2_3;
+        out( 2 ) = V( 2 ) * vy + x - V( 1.0 - mu ) * x1 / r1_3 - V( mu ) * x2 / r2_3;
+        out( 3 ) = -V( 2 ) * vx + y - V( 1.0 - mu ) * y / r1_3 - V( mu ) * y / r2_3;
         return out;
     };
 }
@@ -84,9 +79,8 @@ inline double cr3bp_jacobi( const CR3BPState& s, double mu = kCR3BPMu )
     const double vx = s( 2 ), vy = s( 3 );
     const double r1 = std::hypot( x + mu, y );
     const double r2 = std::hypot( x - 1.0 + mu, y );
-    const double Omega = 0.5 * ( x * x + y * y )
-                       + ( 1.0 - mu ) / r1 + mu / r2
-                       + 0.5 * mu * ( 1.0 - mu );
+    const double Omega =
+        0.5 * ( x * x + y * y ) + ( 1.0 - mu ) / r1 + mu / r2 + 0.5 * mu * ( 1.0 - mu );
     return 2.0 * Omega - ( vx * vx + vy * vy );
 }
 
@@ -95,10 +89,10 @@ inline CR3BPState cr3bp_transit_ic()
     // Interior-to-exterior transit: crosses L1, loops Moon twice, exits L2.
     // Adjusted in Task 22 from (0.836, 0, 0, 0.0095) — that IC was bounded.
     CR3BPState x0;
-    x0( 0 ) = 0.82;     // inside L1 neck
+    x0( 0 ) = 0.82;  // inside L1 neck
     x0( 1 ) = 0.0;
     x0( 2 ) = 0.0;
-    x0( 3 ) = 0.175;    // velocity normal to x-axis, strong enough to transit
+    x0( 3 ) = 0.175;  // velocity normal to x-axis, strong enough to transit
     return x0;
 }
 

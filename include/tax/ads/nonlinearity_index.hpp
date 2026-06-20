@@ -25,8 +25,7 @@ namespace tax::ads::detail
 
 // Sum of |coefficients| at total degree 1.
 template < class T, int N, int M, class Storage >
-[[nodiscard]] T linRowBound(
-    const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
+[[nodiscard]] T linRowBound( const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
 {
     static_assert( N >= 1, "linRowBound requires N >= 1" );
     T acc{ 0 };

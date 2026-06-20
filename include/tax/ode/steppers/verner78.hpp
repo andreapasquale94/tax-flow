@@ -13,9 +13,7 @@
 namespace tax::ode
 {
 
-template < class StateT,
-           class Controller = controllers::PI< double > >
-using Verner78Stepper =
-    detail::EmbeddedRKStepper< detail::Verner78Tab, StateT, Controller >;
+template < class StateT, class Controller = controllers::PI< double > >
+using Verner78Stepper = detail::EmbeddedRKStepper< detail::Verner78Tab, StateT, Controller >;
 
 }  // namespace tax::ode

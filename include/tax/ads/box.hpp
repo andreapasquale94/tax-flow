@@ -14,9 +14,8 @@
 
 #pragma once
 
-#include <utility>
-
 #include <tax/la/types.hpp>
+#include <utility>
 
 namespace tax::ads
 {
@@ -26,7 +25,7 @@ struct Box
 {
     static_assert( M >= 1, "Box dimension must be at least 1" );
 
-    tax::la::VecNT< M, T > center    = tax::la::VecNT< M, T >::Zero();
+    tax::la::VecNT< M, T > center = tax::la::VecNT< M, T >::Zero();
     tax::la::VecNT< M, T > halfWidth = tax::la::VecNT< M, T >::Zero();
 
     template < class Derived >
@@ -48,8 +47,8 @@ struct Box
         const T h = halfWidth( dim ) * T{ 0.5 };
         L.halfWidth( dim ) = h;
         R.halfWidth( dim ) = h;
-        L.center( dim )    = center( dim ) - h;
-        R.center( dim )    = center( dim ) + h;
+        L.center( dim ) = center( dim ) - h;
+        R.center( dim ) = center( dim ) + h;
         return { L, R };
     }
 

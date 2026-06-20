@@ -4,18 +4,19 @@
 // Step 1 — Single multivariate Taylor flow polynomial over the L1
 // neighbourhood IC box (Earth-Moon planar CR3BP).
 //
-// One DA-valued state built from icBox() is propagated with Dense=true.
-// At evenly spaced snapshot times we evaluate the (x, y) components of
-// the flow polynomial along the IC box boundary; the closed polygons
-// show the box being sheared along the unstable manifold direction.
+// One DA-valued state built from icBox() is propagated. At evenly spaced
+// snapshot times we retrieve the accepted-step state closest to the
+// snapshot time and evaluate the (x, y) components of the flow polynomial
+// along the IC box boundary; the closed polygons show the box being sheared
+// along the unstable manifold direction.
 //
 // Run:    ./three_body_taylor
 // Writes: cr3bp_taylor.json   (plot with examples/plot/plot_three_body.py)
 // =============================================================================
 
+#include <algorithm>
 #include <tax/ads/da_state.hpp>
 #include <tax/ode.hpp>
-#include <tax/ode/io.hpp>
 
 #include "common.hpp"
 
@@ -29,33 +30,44 @@ int main()
     constexpr int M = 4;  // number of DA variables
     constexpr int D = 4;  // state dimension
 
-    constexpr int    kNSnaps   = 13;   // every 0.25 time units
-    constexpr int    kNPerEdge = 24;
-    constexpr double t_final   = 3.0;  // ~1.1 Lyapunov times
+    constexpr int kNSnaps = 13;  // every 0.25 time units
+    constexpr int kNPerEdge = 24;
+    constexpr double t_final = 3.0;  // ~1.1 Lyapunov times
 
     const auto ic_box = icBox();
 
     tax::ode::IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-13;
-    cfg.max_steps           = 100000;
+    cfg.max_steps = 100000;
+    cfg.save_steps = true;
 
-    // ---- One dense DA propagation over the whole interval -------------------
-    auto      x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
+    // ---- One DA propagation over the whole interval -------------------------
+    auto x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
     Stopwatch clock;
-    auto      sol = tax::ode::propagate< /*Dense=*/true >(
-        Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
+    auto sol = tax::ode::propagate( Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
     const double elapsed_ms = clock.ms();
 
     // ---- Scalar centerpoint orbit (plot underlay) ----------------------------
-    auto ref_sol = tax::ode::propagate< /*Dense=*/true >(
-        Verner89{}, rhs(), icCenter(), 0.0, t_final, cfg );
-    const auto reference = sampleOrbit( ref_sol, tax::ode::linspace( 0.0, t_final, 200 ), D );
+    auto ref_sol = tax::ode::propagate( Verner89{}, rhs(), icCenter(), 0.0, t_final, cfg );
+    const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
+
+    // Helper: find stored step with t closest to t_query.
+    auto stateAt = [&sol]( double t_query ) -> decltype( sol.x.front() ) {
+        auto it = std::lower_bound( sol.t.begin(), sol.t.end(), t_query );
+        if ( it == sol.t.end() ) return sol.x.back();
+        if ( it == sol.t.begin() ) return sol.x.front();
+        auto prev = std::prev( it );
+        const std::size_t idx = ( t_query - *prev < *it - t_query )
+                                    ? static_cast< std::size_t >( prev - sol.t.begin() )
+                                    : static_cast< std::size_t >( it - sol.t.begin() );
+        return sol.x[idx];
+    };
 
     // ---- Evaluate the flow polynomial on the box boundary per snapshot ------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
-    for ( double t : tax::ode::linspace( 0.0, t_final, kNSnaps ) )
-        snapshots.push_back( { t, { evalPolygon( sol( t ), boundary, boundaryToBox ) } } );
+    for ( double t : example::linspace( 0.0, t_final, kNSnaps ) )
+        snapshots.push_back( { t, { evalPolygon( stateAt( t ), boundary, boundaryToBox ) } } );
 
     // ---- Output ---------------------------------------------------------------
     writeRunJson( "cr3bp_taylor.json", "taylor",

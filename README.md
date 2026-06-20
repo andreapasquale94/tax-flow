@@ -53,7 +53,6 @@ ctest --test-dir build --output-on-failure
 | Option | Default | Description |
 |--------|---------|-------------|
 | `TAXFLOW_BUILD_UNITTESTS` | `ON`  | Build the Google Test unit-test suite |
-| `TAXFLOW_BUILD_BENCHMARK` | `OFF` | Build the Google Benchmark suite |
 | `TAXFLOW_BUILD_EXAMPLES`  | `OFF` | Build example programs under `examples/` |
 | `TAX_SOURCE_DIR`          | `../tax` | Path to the `tax` source tree (used only when `tax` is not installed) |
 

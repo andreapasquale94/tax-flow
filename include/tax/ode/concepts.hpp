@@ -2,52 +2,40 @@
 //
 // Stepper concept hierarchy.
 //   - Stepper:         minimum — take one step at the supplied h and
-//                      expose a dense-output payload + eval_dense.
+//                      expose a StepData typedef.
 //   - AdaptiveStepper: refinement — embedded error estimator + retry
 //                      loop, keyed off `static constexpr bool is_adaptive`.
 //
-// Steppers may additionally declare `static constexpr bool
-// has_dense_output` to indicate whether eval_dense reproduces the
-// method's full order (true) or only a cubic-Hermite fallback (false).
-// The flag is informational; no concept gates on it.
+// Steppers additionally declare `static constexpr bool has_step_expansion`
+// (true for Taylor, false for RK) and the matching eval (via tax::la::eval)
+// or step() member, exercised via `if constexpr` in the integrator's flow
+// closure. The concept stays minimal; a missing member yields a clear
+// compile error at the flow-closure site.
 
 #pragma once
 
 #include <concepts>
-#include <utility>
-
 #include <tax/ode/step_result.hpp>
+#include <utility>
 
 namespace tax::ode::concepts
 {
 
 template < class S >
-concept Stepper = requires(
-    S s,
-    typename S::Rhs f,
-    typename S::State x,
-    typename S::T t,
-    typename S::T h,
-    const typename S::Config& cfg )
-{
+concept Stepper = requires( S s, typename S::Rhs f, typename S::State x, typename S::T t,
+                            typename S::T h, const typename S::Config& cfg ) {
     typename S::State;
     typename S::T;
     typename S::Config;
     typename S::Rhs;
-    typename S::DenseData;
+    typename S::StepData;
 
-    { s.step( f, x, t, h, cfg ) }
-        -> std::same_as< StepResult< typename S::State, S > >;
-
-    { S::eval_dense( std::declval< typename S::DenseData >(),
-                     std::declval< typename S::T >(),
-                     std::declval< typename S::T >() ) }
-        -> std::same_as< typename S::State >;
+    { s.step( f, x, t, h, cfg ) } -> std::same_as< StepResult< typename S::State, S > >;
 };
 
 template < class S >
-concept AdaptiveStepper = Stepper< S >
-    && requires { { S::is_adaptive } -> std::convertible_to< bool >; }
-    && S::is_adaptive;
+concept AdaptiveStepper = Stepper< S > && requires {
+    { S::is_adaptive } -> std::convertible_to< bool >;
+} && S::is_adaptive;
 
 }  // namespace tax::ode::concepts

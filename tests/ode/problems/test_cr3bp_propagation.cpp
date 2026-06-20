@@ -7,11 +7,11 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <cmath>
+#include <tax/la/types.hpp>
+#include <tax/ode.hpp>
 
 #include "cr3bp_problem.hpp"
-#include <tax/ode.hpp>
 
 using namespace tax::ode::test;
 
@@ -48,7 +48,9 @@ TEST( OdeCR3BPPropagation, Taylor16 )
 {
     tax::ode::IntegratorConfig< double > cfg;
     cfg.abstol = cfg.reltol = 1e-13;
-    tax::ode::Taylor< 16, CR3BPState, tax::ode::controllers::JorbaZou< double >, false, decltype( cr3bp_rhs() ) > integ{ cr3bp_rhs(), cfg };
+    tax::ode::Taylor< 16, CR3BPState, tax::ode::controllers::JorbaZou< double >,
+                      decltype( cr3bp_rhs() ) >
+        integ{ cr3bp_rhs(), cfg };
     auto sol = integ.integrate( cr3bp_transit_ic(), 0.0, kCR3BPTFinal );
     check_jacobi_preserved( sol, 1e-10 );
 

@@ -6,9 +6,8 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <cmath>
-
+#include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
 namespace
@@ -16,13 +15,11 @@ namespace
 
 inline auto harmonic_rhs()
 {
-    return []( const auto& s, const auto& /*t*/ )
-    {
+    return []( const auto& s, const auto& /*t*/ ) {
         using S = std::decay_t< decltype( s ) >;
         S out;
-        if constexpr ( S::RowsAtCompileTime == Eigen::Dynamic )
-            out.resize( s.size() );
-        out( 0 ) =  s( 1 );
+        if constexpr ( S::RowsAtCompileTime == Eigen::Dynamic ) out.resize( s.size() );
+        out( 0 ) = s( 1 );
         out( 1 ) = -s( 0 );
         return out;
     };
@@ -36,15 +33,19 @@ TEST( OdeIntegratorStatic, Taylor16ParityWithDynamic )
     cfg.abstol = cfg.reltol = 1e-13;
 
     using SStatic = tax::la::VecNT< 2, double >;
-    using SDyn    = Eigen::VectorXd;
+    using SDyn = Eigen::VectorXd;
 
     using RhsT = decltype( harmonic_rhs() );
     using Ctrl = tax::ode::controllers::JorbaZou< double >;
-    tax::ode::Taylor< 16, SStatic, Ctrl, false, RhsT > integ_s{ harmonic_rhs(), cfg };
-    tax::ode::Taylor< 16, SDyn,    Ctrl, false, RhsT > integ_d{ harmonic_rhs(), cfg };
+    tax::ode::Taylor< 16, SStatic, Ctrl, RhsT > integ_s{ harmonic_rhs(), cfg };
+    tax::ode::Taylor< 16, SDyn, Ctrl, RhsT > integ_d{ harmonic_rhs(), cfg };
 
-    SStatic x0_s; x0_s( 0 ) = 1.0; x0_s( 1 ) = 0.0;
-    SDyn    x0_d( 2 ); x0_d( 0 ) = 1.0; x0_d( 1 ) = 0.0;
+    SStatic x0_s;
+    x0_s( 0 ) = 1.0;
+    x0_s( 1 ) = 0.0;
+    SDyn x0_d( 2 );
+    x0_d( 0 ) = 1.0;
+    x0_d( 1 ) = 0.0;
 
     auto sol_s = integ_s.integrate( x0_s, 0.0, M_PI );
     auto sol_d = integ_d.integrate( x0_d, 0.0, M_PI );
@@ -59,13 +60,17 @@ TEST( OdeIntegratorStatic, Verner89ParityWithDynamic )
     cfg.abstol = cfg.reltol = 1e-13;
 
     using SStatic = tax::la::VecNT< 2, double >;
-    using SDyn    = Eigen::VectorXd;
+    using SDyn = Eigen::VectorXd;
 
     tax::ode::Verner89< SStatic > integ_s{ harmonic_rhs(), cfg };
-    tax::ode::Verner89< SDyn >    integ_d{ harmonic_rhs(), cfg };
+    tax::ode::Verner89< SDyn > integ_d{ harmonic_rhs(), cfg };
 
-    SStatic x0_s; x0_s( 0 ) = 1.0; x0_s( 1 ) = 0.0;
-    SDyn    x0_d( 2 ); x0_d( 0 ) = 1.0; x0_d( 1 ) = 0.0;
+    SStatic x0_s;
+    x0_s( 0 ) = 1.0;
+    x0_s( 1 ) = 0.0;
+    SDyn x0_d( 2 );
+    x0_d( 0 ) = 1.0;
+    x0_d( 1 ) = 0.0;
 
     auto sol_s = integ_s.integrate( x0_s, 0.0, M_PI );
     auto sol_d = integ_d.integrate( x0_d, 0.0, M_PI );

@@ -2,31 +2,28 @@
 //
 // Function-form propagate. Takes a method tag, an RHS, an initial
 // state, a time interval, an optional config, and optional events;
-// returns the resulting Solution. `Dense` is a bool template parameter
-// (default false) that toggles continuous-extension storage and
-// enables Solution::operator()(t) interpolation.
+// returns the resulting Solution.
 //
 //   auto sol = tax::ode::propagate(methods::Verner89{},
 //                                  rhs, x0, t0, t1, cfg);
 //
-//   auto sol = tax::ode::propagate<true>(methods::Taylor<16>{},
-//                                        rhs, x0, t0, t1, cfg);
-//   auto x_at = sol(0.42);   // dense interpolation
+// The returned Solution holds all accepted step boundaries
+// (cfg.save_steps == true, the default) or only the initial and final
+// state (cfg.save_steps == false). Events are always recorded.
 
 #pragma once
 
-#include <type_traits>
-#include <utility>
-#include <vector>
-
 #include <tax/ode/event.hpp>
 #include <tax/ode/integrator.hpp>
+#include <tax/ode/steppers/feagin12.hpp>
+#include <tax/ode/steppers/feagin14.hpp>
+#include <tax/ode/steppers/fehlberg78.hpp>
 #include <tax/ode/steppers/taylor.hpp>
 #include <tax/ode/steppers/verner78.hpp>
 #include <tax/ode/steppers/verner89.hpp>
-#include <tax/ode/steppers/fehlberg78.hpp>
-#include <tax/ode/steppers/feagin12.hpp>
-#include <tax/ode/steppers/feagin14.hpp>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace tax::ode
 {
@@ -110,17 +107,16 @@ using StepperT = typename StepperFor< Method, State >::type;
 
 }  // namespace detail
 
-// Propagate an ODE. Dense=true switches the Solution to carry per-step
-// continuous-extension data and enables sol(t) interpolation.
-template < bool Dense = false, class Method, class F, class State, class T >
+// Propagate an ODE. Returns a Solution holding accepted step boundaries
+// (save_steps=true by default) plus any recorded events.
+template < class Method, class F, class State, class T >
 [[nodiscard]] auto propagate(
-    Method, F&& rhs, const State& x0, const T& t0, const T& t1,
-    IntegratorConfig< T > cfg = {},
+    Method, F&& rhs, const State& x0, const T& t0, const T& t1, IntegratorConfig< T > cfg = {},
     std::vector< Event< detail::StepperT< Method, State > > > events = {} )
 {
     using Stepper = detail::StepperT< Method, State >;
-    Integrator< Stepper, std::decay_t< F >, Dense > integ{
-        std::forward< F >( rhs ), std::move( cfg ), std::move( events ) };
+    Integrator< Stepper, std::decay_t< F > > integ{ std::forward< F >( rhs ), std::move( cfg ),
+                                                    std::move( events ) };
     return integ.integrate( x0, t0, t1 );
 }
 

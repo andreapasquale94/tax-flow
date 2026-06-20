@@ -243,23 +243,3 @@ A post-pass that collapses sibling pairs whose reconstructed parent still
 satisfies `crit` (using `TruncationCriterion`/`NliCriterion`), repeating until
 no pair merges. Useful to trim a tree that was split more finely than the final
 shape needs.
-
----
-
-## I/O
-
-Opt-in CSV writers (`#include <tax/ads/io.hpp>`):
-
-```cpp
-template <class Payload, int M, class T>
-void writeTreeCsv(const AdsTree<Payload, M, T>& tree, T t_final,
-                  const std::filesystem::path& path);
-
-template <class Payload, int M, class T>
-void writeBoxCountCsv(const AdsTree<Payload, M, T>& tree, T t_final,
-                      std::span<const double> times,
-                      const std::filesystem::path& path);
-```
-
-`writeTreeCsv` dumps one row per leaf (links, depth, interval, centre,
-half-width); `writeBoxCountCsv` reports the live box count at each sampled time.

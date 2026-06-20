@@ -7,7 +7,7 @@
 truncated-Taylor core. It provides two header-only modules:
 
 - **ODE Integrator (`tax::ode`)** — adaptive Runge–Kutta and Taylor-method
-  integration with an event system (triggers/actions), dense output, and
+  integration with an event system (triggers/actions), step recording, and
   step-size controllers.
 - **Automatic Domain Splitting (`tax::ads`)** — Wittig 2015 ADS and the LOADS
   variant (Losacco/Fossà/Armellin 2024), composed on top of the `tax::ode`
@@ -20,7 +20,7 @@ The include paths (`<tax/ode.hpp>`, `<tax/ads.hpp>`) and namespaces
 
 - **[Tutorials](tutorials/index.md)** — worked two-body and three-body problems,
   plus parallel ADS by refinement.
-- **[ODE Integrator](ode/index.md)** — methods, controllers, events, dense output.
+- **[ODE Integrator](ode/index.md)** — methods, controllers, events, step recording.
 - **[Automatic Domain Splitting](ads/index.md)** — boxes, trees, criteria, merge,
   refinement.
 

@@ -16,9 +16,7 @@
 namespace tax::ode
 {
 
-template < class StateT,
-           class Controller = controllers::PI< double > >
-using Feagin14Stepper =
-    detail::EmbeddedRKStepper< detail::Feagin14Tab, StateT, Controller >;
+template < class StateT, class Controller = controllers::PI< double > >
+using Feagin14Stepper = detail::EmbeddedRKStepper< detail::Feagin14Tab, StateT, Controller >;
 
 }  // namespace tax::ode

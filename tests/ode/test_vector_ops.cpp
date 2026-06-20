@@ -12,9 +12,8 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <cmath>
-
+#include <tax/la/types.hpp>
 #include <tax/ode/vector_ops.hpp>
 #include <tax/tax.hpp>
 
@@ -35,27 +34,28 @@ TEST( OdeVectorOps, ScalarDouble )
 TEST( OdeVectorOps, ScalarTaylorExpansion )
 {
     using DA = tax::TEn< 2, 2 >;
-    DA x = DA::variable( 0.5, 0 );      // coeff[0]=0.5, coeff[var0]=1.0
-    DA y{};                              // zero
+    DA x = DA::variable( 0.5, 0 );  // coeff[0]=0.5, coeff[var0]=1.0
+    DA y{};                         // zero
     VectorOps< DA >::scale_assign( y, 3.0, x );
 
-    EXPECT_DOUBLE_EQ( y[ 0 ], 1.5 );    // 3.0 * 0.5
+    EXPECT_DOUBLE_EQ( y[0], 1.5 );                        // 3.0 * 0.5
     EXPECT_DOUBLE_EQ( VectorOps< DA >::norm( y ), 3.0 );  // 3.0 * 1.0 from var0
 
     VectorOps< DA >::axpy( y, -1.0, x );
-    EXPECT_DOUBLE_EQ( y[ 0 ], 1.5 - 0.5 );
+    EXPECT_DOUBLE_EQ( y[0], 1.5 - 0.5 );
 }
 
 TEST( OdeVectorOps, EigenVectorDouble )
 {
     using V = tax::la::VecNT< 3, double >;
-    V x; x << 1.0, -2.0, 0.5;
+    V x;
+    x << 1.0, -2.0, 0.5;
     V y = V::Zero();
 
     VectorOps< V >::scale_assign( y, 2.0, x );
-    EXPECT_DOUBLE_EQ( y( 0 ),  2.0 );
+    EXPECT_DOUBLE_EQ( y( 0 ), 2.0 );
     EXPECT_DOUBLE_EQ( y( 1 ), -4.0 );
-    EXPECT_DOUBLE_EQ( y( 2 ),  1.0 );
+    EXPECT_DOUBLE_EQ( y( 2 ), 1.0 );
 
     EXPECT_DOUBLE_EQ( VectorOps< V >::norm( y ), 4.0 );
 
@@ -68,21 +68,21 @@ TEST( OdeVectorOps, EigenVectorDouble )
 TEST( OdeVectorOps, EigenVectorOfTaylorExpansion )
 {
     using DA = tax::TEn< 2, 2 >;
-    using V  = tax::la::VecNT< 2, DA >;
+    using V = tax::la::VecNT< 2, DA >;
 
     V x;
-    x( 0 ) = DA::variable( 1.0, 0 );    // coeff[0]=1.0, coeff[e_0]=1.0
-    x( 1 ) = DA::variable( -0.5, 1 );   // coeff[0]=-0.5, coeff[e_1]=1.0
+    x( 0 ) = DA::variable( 1.0, 0 );   // coeff[0]=1.0, coeff[e_0]=1.0
+    x( 1 ) = DA::variable( -0.5, 1 );  // coeff[0]=-0.5, coeff[e_1]=1.0
     V y = V::Zero();
 
     VectorOps< V >::scale_assign( y, 2.0, x );
-    EXPECT_DOUBLE_EQ( y( 0 )[ 0 ], 2.0 );    // 2*1.0
-    EXPECT_DOUBLE_EQ( y( 1 )[ 0 ], -1.0 );   // 2*(-0.5)
+    EXPECT_DOUBLE_EQ( y( 0 )[0], 2.0 );   // 2*1.0
+    EXPECT_DOUBLE_EQ( y( 1 )[0], -1.0 );  // 2*(-0.5)
 
     // sup-norm: max of (|2*1.0|, |2*1.0|, |2*(-0.5)|, |2*1.0|) = 2.0
     EXPECT_DOUBLE_EQ( VectorOps< V >::norm( y ), 2.0 );
 
     VectorOps< V >::axpy( y, -1.0, x );
-    EXPECT_DOUBLE_EQ( y( 0 )[ 0 ], 2.0 - 1.0 );
-    EXPECT_DOUBLE_EQ( y( 1 )[ 0 ], -1.0 + 0.5 );
+    EXPECT_DOUBLE_EQ( y( 0 )[0], 2.0 - 1.0 );
+    EXPECT_DOUBLE_EQ( y( 1 )[0], -1.0 + 0.5 );
 }

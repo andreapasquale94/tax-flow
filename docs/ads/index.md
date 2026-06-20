@@ -114,4 +114,3 @@ dimension.
 | `tax/ads/refine_criteria.hpp` | `QualityCriterion`, `CoefficientMatchCriterion`, `VolumeRatioCriterion` |
 | `tax/ads/refine.hpp` | `RefineDriver<Stepper, Quality>`, `refine<P>(method, quality, …)` |
 | `tax/ads/merge.hpp` | `merge(tree, criterion)`, `MergeStats` |
-| `tax/ads/io.hpp` (opt-in) | `writeTreeCsv`, `writeBoxCountCsv` |

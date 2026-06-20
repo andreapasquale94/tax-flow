@@ -19,13 +19,14 @@ namespace tax::ode
 template < class T = double >
 struct IntegratorConfig
 {
-    T   abstol               = T{ 1e-12 };
-    T   reltol               = T{ 1e-12 };
-    T   initial_step         = T{ 0 };
-    T   min_step             = T{ 0 };
-    T   max_step             = T{ 0 };
-    int max_steps            = 100'000;
+    T abstol = T{ 1e-12 };
+    T reltol = T{ 1e-12 };
+    T initial_step = T{ 0 };
+    T min_step = T{ 0 };
+    T max_step = T{ 0 };
+    int max_steps = 100'000;
     int max_rejects_per_step = 16;
+    bool save_steps = true;  // false ⇒ keep only initial + final state
 };
 
 }  // namespace tax::ode

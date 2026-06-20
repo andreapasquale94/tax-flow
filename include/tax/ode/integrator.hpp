@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
+#include <tax/la.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/actions.hpp>
 #include <tax/ode/concepts.hpp>
@@ -31,14 +32,14 @@
 namespace tax::ode
 {
 
-template < concepts::Stepper Stepper, class F, bool Dense = false >
+template < concepts::Stepper Stepper, class F >
 class Integrator
 {
    public:
     using State = typename Stepper::State;
     using T = typename Stepper::T;
     using Config = typename Stepper::Config;
-    using Solution = tax::ode::Solution< Stepper, State, Dense >;
+    using Solution = tax::ode::Solution< Stepper, State >;
     using EventList = std::vector< Event< Stepper > >;
 
     explicit Integrator( F f, Config cfg = {}, EventList events = {} )
@@ -62,8 +63,8 @@ class Integrator
     EventList events_;
 };
 
-template < concepts::Stepper Stepper, class F, bool Dense >
-typename Integrator< Stepper, F, Dense >::Solution Integrator< Stepper, F, Dense >::integrate(
+template < concepts::Stepper Stepper, class F >
+typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
     const State& x0, const T& t0, const T& tmax ) const
 {
     if ( !( tmax > t0 ) ) throw std::invalid_argument( "Integrator::integrate: tmax must be > t0" );
@@ -71,6 +72,23 @@ typename Integrator< Stepper, F, Dense >::Solution Integrator< Stepper, F, Dense
     Solution sol;
     sol.t.push_back( t0 );
     sol.x.push_back( x0 );
+
+    // save_steps == true : append every accepted boundary.
+    // save_steps == false: keep [initial, final] — overwrite the trailing
+    //                       "final" slot so only (t0,x0) and the latest state
+    //                       remain. (Two entries, collapsing to one initial-only
+    //                       entry if zero steps are taken.)
+    auto record = [&]( const T& tt, const State& xx ) {
+        if ( cfg_.save_steps || sol.t.size() == 1 )
+        {
+            sol.t.push_back( tt );
+            sol.x.push_back( xx );
+        } else
+        {
+            sol.t.back() = tt;
+            sol.x.back() = xx;
+        }
+    };
 
     Stepper stepper{};  // per-integration controller state
     State x = x0;
@@ -123,9 +141,19 @@ typename Integrator< Stepper, F, Dense >::Solution Integrator< Stepper, F, Dense
                 }
             }
 
-            // Build the step context once for all events.
-            using Ctx = StepperCtx< Stepper, State, T, typename Stepper::DenseData >;
-            const Ctx ctx{ x, t, r.x_new, r.h_used, r.dense };
+            // Per-step flow(τ) → state at t_old + τ. Capture x,t BY VALUE: the
+            // terminate branch below mutates x and t before calling flow(term_tau),
+            // so the closure must hold copies of the step-start values. r is captured
+            // by reference (alive for the whole accepted-step block).
+            auto flow = [&f = f_, x, t, &r]( T tau ) -> State {
+                if constexpr ( Stepper::has_step_expansion )
+                    return tax::la::eval( r.data, tau );
+                else
+                    return Stepper::step( f, x, t, tau );
+            };
+            FlowRef< State, T > flow_ref{ flow };
+            using Ctx = StepperCtx< Stepper, State, T >;
+            const Ctx ctx{ x, t, r.x_new, r.h_used, flow_ref };
 
             struct Fired
             {
@@ -161,18 +189,14 @@ typename Integrator< Stepper, F, Dense >::Solution Integrator< Stepper, F, Dense
             if ( terminate )
             {
                 // Truncate at the *terminating* event's time (term_tau) — not the
-                // earliest fired event — using the Stepper's continuous extension
-                // (eval_dense) for a machine-precision x_term.
-                State x_term = Stepper::eval_dense( ctx.dense, ctx.t_old, ctx.t_old + term_tau );
-                sol.t.push_back( ctx.t_old + term_tau );
-                sol.x.push_back( std::move( x_term ) );
-                if constexpr ( Dense ) sol.dense.push_back( std::move( r.dense ) );
+                // earliest fired event — using the per-step flow closure for a
+                // machine-precision x_term at full method order.
+                State x_term = flow( term_tau );
+                record( ctx.t_old + term_tau, x_term );
                 break;
             }
 
-            sol.t.push_back( t );
-            sol.x.push_back( x );
-            if constexpr ( Dense ) sol.dense.push_back( std::move( r.dense ) );
+            record( t, x );
 
             if constexpr ( concepts::AdaptiveStepper< Stepper > ) h = r.h_next;
 

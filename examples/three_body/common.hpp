@@ -30,14 +30,12 @@
 #pragma once
 
 #include <Eigen/Eigenvalues>
-
 #include <array>
 #include <cmath>
-#include <utility>
-
 #include <tax/ads/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
+#include <utility>
 
 #include "../common/output.hpp"
 
@@ -50,25 +48,24 @@ using example::unitSquareBoundary;
 using example::writeJsonArray;
 
 // ---- Problem constants -----------------------------------------------------
-inline constexpr double kCR3BPMu = 0.01215058560962404;   // Earth-Moon
+inline constexpr double kCR3BPMu = 0.01215058560962404;  // Earth-Moon
 inline constexpr double kCR3BPL1 = 0.8369180073407246;
 
 // ---- Right-hand side -------------------------------------------------------
 inline auto rhs( double mu = kCR3BPMu )
 {
-    return [ mu ]( const auto& s, const auto& /*t*/ )
-    {
+    return [mu]( const auto& s, const auto& /*t*/ ) {
         using S = std::decay_t< decltype( s ) >;
         using V = typename S::Scalar;
 
         S out;
-        const V x  = s( 0 );
-        const V y  = s( 1 );
+        const V x = s( 0 );
+        const V y = s( 1 );
         const V vx = s( 2 );
         const V vy = s( 3 );
 
-        const V x1   = x + V( mu );
-        const V x2   = x - V( 1.0 - mu );
+        const V x1 = x + V( mu );
+        const V x2 = x - V( 1.0 - mu );
         const V r1_2 = x1 * x1 + y * y;
         const V r2_2 = x2 * x2 + y * y;
         const V r1_3 = r1_2 * sqrt( r1_2 );
@@ -76,12 +73,8 @@ inline auto rhs( double mu = kCR3BPMu )
 
         out( 0 ) = vx;
         out( 1 ) = vy;
-        out( 2 ) =  V( 2.0 ) * vy + x
-                   - V( 1.0 - mu ) * x1 / r1_3
-                   - V( mu )       * x2 / r2_3;
-        out( 3 ) = -V( 2.0 ) * vx + y
-                   - V( 1.0 - mu ) * y  / r1_3
-                   - V( mu )       * y  / r2_3;
+        out( 2 ) = V( 2.0 ) * vy + x - V( 1.0 - mu ) * x1 / r1_3 - V( mu ) * x2 / r2_3;
+        out( 3 ) = -V( 2.0 ) * vx + y - V( 1.0 - mu ) * y / r1_3 - V( mu ) * y / r2_3;
         return out;
     };
 }
@@ -89,30 +82,27 @@ inline auto rhs( double mu = kCR3BPMu )
 // ---- L1 linearised eigenvalues + unstable eigenvector ----------------------
 struct LinearisationL1
 {
-    double                       sigma;
-    double                       lambda_unstable;
-    double                       T_lyapunov;
-    tax::la::VecNT< 4, double >  v_unstable;
+    double sigma;
+    double lambda_unstable;
+    double T_lyapunov;
+    tax::la::VecNT< 4, double > v_unstable;
 };
 
 inline LinearisationL1 linearisationL1( double mu = kCR3BPMu, double x_L1 = kCR3BPL1 )
 {
-    const double r1    = x_L1 + mu;
-    const double r2    = 1.0 - mu - x_L1;
-    const double sigma = ( 1.0 - mu ) / ( r1 * r1 * r1 )
-                       + mu / ( r2 * r2 * r2 );
+    const double r1 = x_L1 + mu;
+    const double r2 = 1.0 - mu - x_L1;
+    const double sigma = ( 1.0 - mu ) / ( r1 * r1 * r1 ) + mu / ( r2 * r2 * r2 );
 
     Eigen::Matrix4d A;
-    A <<     0.0,             0.0,        1.0,  0.0,
-             0.0,             0.0,        0.0,  1.0,
-         1.0 + 2.0 * sigma,    0.0,        0.0,  2.0,
-             0.0,         1.0 - sigma,   -2.0,  0.0;
+    A << 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0 + 2.0 * sigma, 0.0, 0.0, 2.0, 0.0, 1.0 - sigma,
+        -2.0, 0.0;
 
     Eigen::EigenSolver< Eigen::Matrix4d > es( A );
     const auto& vals = es.eigenvalues();
     const auto& vecs = es.eigenvectors();
 
-    int    idx_u    = -1;
+    int idx_u = -1;
     double lambda_u = 0.0;
     for ( int i = 0; i < 4; ++i )
     {
@@ -121,20 +111,19 @@ inline LinearisationL1 linearisationL1( double mu = kCR3BPMu, double x_L1 = kCR3
         if ( std::abs( im ) < 1e-9 && re > lambda_u )
         {
             lambda_u = re;
-            idx_u    = i;
+            idx_u = i;
         }
     }
 
     LinearisationL1 out{};
-    out.sigma           = sigma;
+    out.sigma = sigma;
     out.lambda_unstable = lambda_u;
 
-    const double u_minus = 0.5 * ( ( sigma - 2.0 )
-                                 - std::sqrt( 9.0 * sigma * sigma - 8.0 * sigma ) );
-    out.T_lyapunov       = 2.0 * M_PI / std::sqrt( -u_minus );
+    const double u_minus =
+        0.5 * ( ( sigma - 2.0 ) - std::sqrt( 9.0 * sigma * sigma - 8.0 * sigma ) );
+    out.T_lyapunov = 2.0 * M_PI / std::sqrt( -u_minus );
 
-    for ( int i = 0; i < 4; ++i )
-        out.v_unstable( i ) = vecs( i, idx_u ).real();
+    for ( int i = 0; i < 4; ++i ) out.v_unstable( i ) = vecs( i, idx_u ).real();
     if ( out.v_unstable( 0 ) < 0.0 ) out.v_unstable = -out.v_unstable;
     out.v_unstable /= out.v_unstable.norm();
     return out;
@@ -156,9 +145,7 @@ inline constexpr double kManifoldOffset = 1.0e-3;
 
 // IC box halfwidth. Defaults spread the box in (x, vy); edit the four
 // entries to use other axes (keep boundaryToBox below in sync).
-inline const tax::la::VecNT< 4, double > kIcBoxHalfWidth{
-    5e-5, 5e-4, 1e-4, 1e-4
-};
+inline const tax::la::VecNT< 4, double > kIcBoxHalfWidth{ 5e-5, 5e-4, 1e-4, 1e-4 };
 
 // ---- IC + box --------------------------------------------------------------
 inline tax::la::VecNT< 4, double > icCenter()
@@ -176,9 +163,6 @@ inline tax::ads::Box< double, 4 > icBox()
 //
 // Maps the two active variation axes (x and vy by default) to their box
 // positions; the two pinned axes get 0.
-inline std::array< double, 4 > boundaryToBox( double a, double b )
-{
-    return { a, 0.0, 0.0, b };
-}
+inline std::array< double, 4 > boundaryToBox( double a, double b ) { return { a, 0.0, 0.0, b }; }
 
 }  // namespace example::three_body

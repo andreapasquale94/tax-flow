@@ -14,15 +14,21 @@ brought in by the umbrella header:
 ```cpp
 template <class T = double>
 struct IntegratorConfig {
-    T   abstol               = T{1e-12};   // absolute local-error tolerance
-    T   reltol               = T{1e-12};   // relative local-error tolerance
-    T   initial_step         = T{0};       // 0 ⇒ stepper picks an initial guess
-    T   min_step             = T{0};       // 0 ⇒ no lower bound (≈ ε·|tmax − t0|)
-    T   max_step             = T{0};       // 0 ⇒ tmax − t0
-    int max_steps            = 100'000;
-    int max_rejects_per_step = 16;
+    T    abstol               = T{1e-12};   // absolute local-error tolerance
+    T    reltol               = T{1e-12};   // relative local-error tolerance
+    T    initial_step         = T{0};       // 0 ⇒ stepper picks an initial guess
+    T    min_step             = T{0};       // 0 ⇒ no lower bound (≈ ε·|tmax − t0|)
+    T    max_step             = T{0};       // 0 ⇒ tmax − t0
+    int  max_steps            = 100'000;
+    int  max_rejects_per_step = 16;
+    bool save_steps           = true;       // false ⇒ keep only initial + final state
 };
 ```
+
+When `save_steps == true` (the default) every accepted step boundary is appended
+to `sol.t` / `sol.x`. When `false`, only the initial and final states are kept —
+useful when only the endpoint or event records are needed and memory is a concern.
+Events are **always** recorded in `sol.events` regardless of `save_steps`.
 
 Validated at `Integrator` construction; invalid values throw
 `std::invalid_argument`.
@@ -42,15 +48,9 @@ concept Stepper = requires(S s, typename S::Rhs f,
     typename S::T;
     typename S::Config;
     typename S::Rhs;
-    typename S::DenseData;
+    typename S::StepData;
 
     { s.step(f, x, t, h, cfg) } -> std::same_as<StepResult<typename S::State, S>>;
-
-    { S::eval_dense(std::declval<typename S::DenseData>(),
-                    std::declval<typename S::T>(),
-                    std::declval<typename S::T>(),
-                    std::declval<typename S::T>()) }
-      -> std::same_as<typename S::State>;
 };
 
 template <class S>
@@ -61,9 +61,13 @@ concept AdaptiveStepper = Stepper<S>
 }  // namespace tax::ode::concepts
 ```
 
-Steppers may also declare `static constexpr bool has_dense_output` to flag
-whether `eval_dense` reproduces the method's full propagation order (`true`)
-or a cubic-Hermite fallback (`false`).
+Steppers additionally expose `static constexpr bool has_step_expansion`:
+
+- **`true`** (Taylor): `StepData` is `tax::la::VecNT<D, TE>` — the per-step time-Taylor
+  expansion of the solution about the step start. The integrator evaluates it via
+  `tax::la::eval(data, τ)` to obtain the state at any `t_old + τ` within the step.
+- **`false`** (RK): `StepData` is empty. For event location the integrator performs
+  a controller-free full-order re-step of size `τ` to query the state at `t_old + τ`.
 
 ---
 
@@ -72,12 +76,12 @@ or a cubic-Hermite fallback (`false`).
 ```cpp
 template <class State, class Stepper>
 struct StepResult {
-    State                         x_new;
-    typename Stepper::T           h_used;
-    typename Stepper::DenseData   dense;
-    typename Stepper::T           h_next;
-    typename Stepper::T           err_norm;
-    bool                          accepted;
+    State                        x_new;
+    typename Stepper::T          h_used;
+    typename Stepper::StepData   data;     // per-step expansion (Taylor) or empty (RK)
+    typename Stepper::T          h_next;
+    typename Stepper::T          err_norm;
+    bool                         accepted;
 };
 ```
 
@@ -131,19 +135,14 @@ All steppers share the surface
 
 ```cpp
 struct Stepper {
-    using State, T, Config, Rhs, DenseData;
+    using State, T, Config, Rhs, StepData;
     static constexpr bool is_adaptive;
-    static constexpr bool has_dense_output;
-    static constexpr int  order_v;      // method order p
-    static constexpr int  order_emb_v;  // embedded estimator order  (RK only)
+    static constexpr bool has_step_expansion;  // true: Taylor, false: RK
+    static constexpr int  order_v;             // method order p
+    static constexpr int  order_emb_v;         // embedded estimator order (RK only)
 
     StepResult<State, Stepper>
         step(const Rhs& f, const State& x, T t, T h, const Config& cfg);
-
-    static State eval_dense(const DenseData& d, T t0, T t1, T tq);
-
-    static std::optional<T> find_zero(/* g_scalar, g_poly, dense, t0, h_used,
-                                          direction, tol */);
 };
 ```
 
@@ -156,9 +155,10 @@ template <int N,
 struct TaylorStepper;
 ```
 
-`N ≥ 2`. `DenseData = Eigen::Matrix<TE<N>, D, 1>` — the per-component time
-expansion that drives both Horner-evaluated dense output and the
-polynomial-Newton root finder.
+`N ≥ 2`. `has_step_expansion = true`. `StepData = tax::la::VecNT<D, TE<N>>` —
+the per-component time-Taylor expansion of the solution about the step start,
+evaluated via `tax::la::eval(data, τ)` to obtain the state at any `t_old + τ`.
+This drives accurate event location at full $N$-th order.
 
 ### Runge–Kutta methods
 
@@ -183,49 +183,28 @@ template <class StateT, class Controller = controllers::PI<double>>
 using Feagin14Stepper   = /* EmbeddedRKStepper */;  // 14(12), 35 stages
 ```
 
-Each `DenseData` carries the boundary states and derivatives required by the
-cubic-Hermite continuous extension. A zero embedded-error estimate (the
-"Fehlberg coincidence", Feagin's stage-difference indicator at small h) is
-floored at machine eps · tol before reaching the step controller.
+`has_step_expansion = false`; `StepData` is empty. For event location the
+integrator performs a controller-free full-order re-step of size `τ` to sample
+the state, accurate to the full method order.
+A zero embedded-error estimate (the "Fehlberg coincidence", Feagin's
+stage-difference indicator at small h) is floored at machine eps · tol before
+reaching the step controller.
 
 ---
 
 ## Solution
 
-Partial-specialised on `Dense`:
-
 ```cpp
-template <class Stepper, class State, bool Dense>
-class Solution;
-
-// Dense = false  — step boundaries + events only, no continuous payload.
 template <class Stepper, class State>
-class Solution<Stepper, State, false> {
+class Solution {
 public:
     using T = typename Stepper::T;
-    std::vector<T>                       t;       // size = nsteps + 1
+    std::vector<T>                       t;       // size = nsteps + 1 (save_steps=true)
+                                                  //        or 2       (save_steps=false)
     std::vector<State>                   x;       // x[i] at t[i]
     std::vector<EventRecord<State, T>>   events;  // monotonic in EventRecord::t
 
-    [[nodiscard]] std::size_t size() const noexcept;
-};
-
-// Dense = true   — adds per-step continuous-extension data + sol(t).
-template <class Stepper, class State>
-class Solution<Stepper, State, true> {
-public:
-    using T         = typename Stepper::T;
-    using DenseData = typename Stepper::DenseData;
-
-    std::vector<T>                       t;       // size = nsteps + 1
-    std::vector<State>                   x;       // size = nsteps + 1
-    std::vector<DenseData>               dense;   // size = nsteps
-    std::vector<EventRecord<State, T>>   events;
-
-    [[nodiscard]] std::size_t size() const noexcept;
-
-    // Binary-search to the enclosing interval, then Stepper::eval_dense.
-    [[nodiscard]] State operator()(const T& t_query) const;
+    [[nodiscard]] std::size_t size() const noexcept;  // returns t.size()
 };
 
 template <class State, class T>
@@ -236,18 +215,23 @@ struct EventRecord {
 };
 ```
 
+`sol.t` and `sol.x` always contain at least the initial state. With
+`cfg.save_steps = true` (the default) every accepted step boundary is appended;
+with `false` only `(t0, x0)` and the final `(tmax, x_final)` are kept.
+`sol.events` is always populated regardless of `save_steps`.
+
 ---
 
 ## Integrator
 
 ```cpp
-template <concepts::Stepper Stepper, class F, bool Dense = false>
+template <concepts::Stepper Stepper, class F>
 class Integrator {
 public:
     using State     = typename Stepper::State;
     using T         = typename Stepper::T;
     using Config    = typename Stepper::Config;
-    using Solution  = tax::ode::Solution<Stepper, State, Dense>;
+    using Solution  = tax::ode::Solution<Stepper, State>;
     using EventList = std::vector<Event<Stepper>>;
 
     explicit Integrator(F f, Config cfg = {}, EventList events = {});
@@ -263,14 +247,14 @@ can be reused across the scalar-state RK steppers and the TE-state Taylor steppe
 
 ## Per-method type aliases
 
-| Alias                                                           | Stepper                  | Default controller              |
-| --------------------------------------------------------------- | ------------------------ | ------------------------------- |
-| `Verner78<State, Ctrl=PI, Dense=false, F=Rhs>`                  | `Verner78Stepper`        | `controllers::PI<double>`       |
-| `Verner89<State, Ctrl=PI, Dense=false, F=Rhs>`                  | `Verner89Stepper`        | `controllers::PI<double>`       |
-| `Fehlberg78<State, Ctrl=PI, Dense=false, F=Rhs>`                | `Fehlberg78Stepper`      | `controllers::PI<double>`       |
-| `Feagin12<State, Ctrl=PI, Dense=false, F=Rhs>`                  | `Feagin12Stepper`        | `controllers::PI<double>`       |
-| `Feagin14<State, Ctrl=PI, Dense=false, F=Rhs>`                  | `Feagin14Stepper`        | `controllers::PI<double>`       |
-| `Taylor<N, State, Ctrl=JorbaZou, Dense=false, F=Rhs>`           | `TaylorStepper<N,…>`     | `controllers::JorbaZou<double>` |
+| Alias                                              | Stepper                  | Default controller              |
+| -------------------------------------------------- | ------------------------ | ------------------------------- |
+| `Verner78<State, Ctrl=PI, F=Rhs>`                  | `Verner78Stepper`        | `controllers::PI<double>`       |
+| `Verner89<State, Ctrl=PI, F=Rhs>`                  | `Verner89Stepper`        | `controllers::PI<double>`       |
+| `Fehlberg78<State, Ctrl=PI, F=Rhs>`                | `Fehlberg78Stepper`      | `controllers::PI<double>`       |
+| `Feagin12<State, Ctrl=PI, F=Rhs>`                  | `Feagin12Stepper`        | `controllers::PI<double>`       |
+| `Feagin14<State, Ctrl=PI, F=Rhs>`                  | `Feagin14Stepper`        | `controllers::PI<double>`       |
+| `Taylor<N, State, Ctrl=JorbaZou, F=Rhs>`           | `TaylorStepper<N,…>`     | `controllers::JorbaZou<double>` |
 
 `F` defaults to `Stepper::Rhs` (a `std::function<State(const State&, double)>`).
 Spell `F` explicitly to avoid the vtable indirection on benchmark hot loops.
@@ -278,12 +262,12 @@ Spell `F` explicitly to avoid the vtable indirection on benchmark hot loops.
 !!! note "`Taylor<…>` requires explicit `F`"
     `TaylorStepper::step()` invokes the RHS with TE-valued state internally, so the
     `std::function<State(const State&, double)>` default does not compile. Spell
-    `decltype(f)` as the 5th template parameter:
+    `decltype(f)` as the 4th template parameter:
 
     ```cpp
     auto f = [](const auto& x, double t) { /*…*/ return x; };
     tax::ode::Taylor<25, Eigen::Matrix<double, 6, 1>,
-                     tax::ode::controllers::JorbaZou<double>, /*Dense=*/false,
+                     tax::ode::controllers::JorbaZou<double>,
                      decltype(f)> integ{ f, cfg };
     ```
 

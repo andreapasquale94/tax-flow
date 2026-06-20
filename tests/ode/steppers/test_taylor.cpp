@@ -6,9 +6,9 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/la/types.hpp>
 #include <cmath>
-
+#include <tax/la.hpp>
+#include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
 using tax::ode::IntegratorConfig;
@@ -33,13 +33,11 @@ TEST( OdeTaylorStepper, ExponentialOneStep )
     EXPECT_TRUE( r.accepted );
     // x(0.1) = e^0.1 ≈ 1.10517091808...
     EXPECT_NEAR( r.x_new( 0 ), std::exp( 0.1 ), 1e-12 );
-    // eval_dense at the step start reproduces x0.
-    auto x_at_t0 = TaylorStepper< 12, State >::eval_dense(
-        r.dense, 0.0, 0.0 );
+    // tax::la::eval at τ=0 reproduces x0.
+    auto x_at_t0 = tax::la::eval( r.data, 0.0 );
     EXPECT_NEAR( x_at_t0( 0 ), x0( 0 ), 1e-14 );
-    // eval_dense at the step end reproduces x_new.
-    auto x_at_t1 = TaylorStepper< 12, State >::eval_dense(
-        r.dense, 0.0, r.h_used );
+    // tax::la::eval at τ=h_used reproduces x_new.
+    auto x_at_t1 = tax::la::eval( r.data, r.h_used );
     EXPECT_NEAR( x_at_t1( 0 ), r.x_new( 0 ), 1e-14 );
 }
 
@@ -51,11 +49,10 @@ TEST( OdeTaylorStepper, HarmonicOneStep )
     State x0;
     x0( 0 ) = 1.0;  // q
     x0( 1 ) = 0.0;  // p
-    const auto f = []( const auto& x, const auto& /*t*/ )
-    {
+    const auto f = []( const auto& x, const auto& /*t*/ ) {
         using S = std::decay_t< decltype( x ) >;
         S out;
-        out( 0 ) =  x( 1 );
+        out( 0 ) = x( 1 );
         out( 1 ) = -x( 0 );
         return out;
     };
@@ -65,7 +62,7 @@ TEST( OdeTaylorStepper, HarmonicOneStep )
     auto r = stepper.step( f, x0, 0.0, 0.05, cfg );
 
     EXPECT_TRUE( r.accepted );
-    EXPECT_NEAR( r.x_new( 0 ),  std::cos( 0.05 ), 1e-12 );
+    EXPECT_NEAR( r.x_new( 0 ), std::cos( 0.05 ), 1e-12 );
     EXPECT_NEAR( r.x_new( 1 ), -std::sin( 0.05 ), 1e-12 );
 }
 
