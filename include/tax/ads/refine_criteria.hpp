@@ -70,7 +70,8 @@ namespace detail
 // the degree-N monomials in the contiguous tail block.
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] int topDegreeSplitDim(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        f )
 {
     std::array< T, M > totals{};
     constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
@@ -107,7 +108,9 @@ template < class T, int N, int M, class Storage, int D >
 // nonlinear in some axis is not split there.
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] std::vector< int > topKDims(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f, int K )
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        f,
+    int K )
 {
     std::array< T, M > totals{};
     constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
@@ -144,8 +147,10 @@ template < class T, int N, int M, class Storage, int D >
 // combo) and the independently propagated child.
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] T childMismatch(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& parent,
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& child,
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        parent,
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        child,
     std::span< const int > dims, std::size_t combo )
 {
     T maxDiff{ 0 };
@@ -182,15 +187,19 @@ struct CoefficientMatchCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] int splitDim(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f ) const
     {
         return detail::topDegreeSplitDim( f );
     }
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] bool acceptable(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& parent,
-        std::span< const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 > > children,
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& parent,
+        std::span< const Eigen::Matrix<
+            tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 > >
+            children,
         std::span< const int > dims, int depth ) const
     {
         if ( depth >= maxDepth ) return true;
@@ -226,15 +235,19 @@ struct VolumeRatioCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] int splitDim(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f ) const
     {
         return detail::topDegreeSplitDim( f );
     }
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] bool acceptable(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& parent,
-        std::span< const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 > > children,
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& parent,
+        std::span< const Eigen::Matrix<
+            tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 > >
+            children,
         std::span< const int > /*dims*/, int depth ) const
     {
         if ( depth >= maxDepth ) return true;
@@ -247,7 +260,8 @@ struct VolumeRatioCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] double imageVolume(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f ) const
     {
         // Active axes (default: all M).
         std::vector< int > ax = axes;
@@ -262,7 +276,7 @@ struct VolumeRatioCriterion
 
         // Derivative polynomials dpoly[i*m + a] = ∂f_i / ∂ξ_{ax[a]} (constant
         // in ξ, so compute once and evaluate at every quadrature point).
-        std::vector< tax::TaylorExpansion< T, N, M, Storage > > dpoly;
+        std::vector< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage > > dpoly;
         dpoly.reserve( static_cast< std::size_t >( R ) * static_cast< std::size_t >( m ) );
         for ( Eigen::Index i = 0; i < R; ++i )
             for ( int a = 0; a < m; ++a )

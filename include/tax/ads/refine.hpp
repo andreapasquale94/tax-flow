@@ -290,7 +290,7 @@ template < int P, class Method, class Quality, class F, class T, int M, int D >
                            tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1,
                            int split_dirs = 1 )
 {
-    using TE = tax::TaylorExpansion< T, P, M, tax::storage::Dense >;
+    using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
     using Stepper = tax::ode::detail::StepperT< Method, DAState >;
 

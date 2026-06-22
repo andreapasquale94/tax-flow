@@ -112,3 +112,19 @@ TEST( NamedOdeState, ParameterSensitivityMatchesClosedForm )
     // coeff at da^1 (flat index 1) = base * kHw * t
     EXPECT_NEAR( xT.inner()[1], base * kHw * tEnd, 1e-12 );
 }
+
+TEST( NamedOdeState, MixedExpansionVectorOpsRoundTrip )
+{
+    // tax::MTE as a VectorOps scalar (Phase 1). Single axis, order 3.
+    auto v = tax::mixed::variable< "x", 3 >( 0.0 );
+    using M = std::decay_t< decltype( v ) >;
+
+    M x = M( 2.0 ) + v;  // coeff[0]=2.0, linear coeff=1.0
+    M y{};
+    tax::ode::VectorOps< M >::scale_assign( y, 3.0, x );
+    EXPECT_DOUBLE_EQ( y.value(), 6.0 );                            // 3*2.0
+    EXPECT_DOUBLE_EQ( tax::ode::VectorOps< M >::norm( y ), 6.0 );  // 3*2.0 dominates
+
+    tax::ode::VectorOps< M >::axpy( y, -1.0, x );
+    EXPECT_DOUBLE_EQ( y.value(), 6.0 - 2.0 );
+}

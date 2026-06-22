@@ -2,25 +2,40 @@
 //
 // VectorOps specialization that lets a named expansion (tax::named) act as
 // an ODE state scalar, so Eigen::Matrix< NE<...>, D, 1 > can be integrated
-// directly. The operations run on the underlying coefficient array, exactly
+// directly. Covers both tax::named::NamedTaylorExpansion and
+// tax::named::MixedTaylorExpansion via a single NamedExpansion concept
+// constraint. The operations run on the underlying coefficient array, exactly
 // like the anonymous TaylorExpansion specialization.
 
 #pragma once
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
+#include <tax/core/mixed_named.hpp>
 #include <tax/core/named.hpp>
 #include <tax/ode/vector_ops.hpp>
 
 namespace tax::ode
 {
 
-template < class T, int N, typename... Axes >
-struct VectorOps< tax::named::NamedTaylorExpansion< T, N, Axes... > >
+// A named/mixed expansion wrapper: exposes a dense inner TaylorExpansion via
+// .inner() and a compile-time coefficient count. Both
+// tax::named::NamedTaylorExpansion and tax::named::MixedTaylorExpansion match.
+template < class S >
+concept NamedExpansion = requires( S s, const S cs ) {
+    typename S::Inner;
+    { S::Inner::nCoefficients } -> std::convertible_to< std::size_t >;
+    { s.inner()[std::size_t{ 0 }] };   // mutable inner() accessible
+    { cs.inner()[std::size_t{ 0 }] };  // const inner() accessible
+};
+
+template < NamedExpansion S >
+struct VectorOps< S >
 {
-    using S = tax::named::NamedTaylorExpansion< T, N, Axes... >;
     static constexpr std::size_t nc = S::Inner::nCoefficients;
+    using T = typename S::Inner::scalar_type;
 
     [[nodiscard]] static double norm( const S& x ) noexcept
     {

@@ -111,6 +111,7 @@ nav:
       - Two-Body Problem: tutorials/two_body.md
       - Parallel ADS by Refinement: tutorials/two_body_refine.md
       - Three-Body Problem: tutorials/three_body.md
+      - Low-Thrust Reachability: tutorials/reachability.md
   - ODE Integrator:
       - Overview: ode/index.md
       - Mathematical Foundations: ode/math.md

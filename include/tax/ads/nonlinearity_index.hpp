@@ -25,7 +25,8 @@ namespace tax::ads::detail
 
 // Sum of |coefficients| at total degree 1.
 template < class T, int N, int M, class Storage >
-[[nodiscard]] T linRowBound( const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
+[[nodiscard]] T linRowBound(
+    const tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >& f ) noexcept
 {
     static_assert( N >= 1, "linRowBound requires N >= 1" );
     T acc{ 0 };
@@ -41,7 +42,7 @@ template < class T, int N, int M, class Storage >
 // Per-coordinate j: Σ over total-degree-≥2 monomials of |coeff| * α_j.
 template < class T, int N, int M, class Storage >
 [[nodiscard]] std::array< T, M > jacobianVariationBound(
-    const tax::TaylorExpansion< T, N, M, Storage >& f ) noexcept
+    const tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >& f ) noexcept
 {
     std::array< T, M > bound{};
     constexpr std::size_t Ncoef = tax::numMonomials( N, M );
@@ -64,7 +65,8 @@ template < class T, int N, int M, class Storage >
 // LOADS nonlinearity index over a vector of TE rows.
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] double nonlinearityIndex(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        f )
 {
     double best = 0.0;
     for ( Eigen::Index i = 0; i < f.size(); ++i )
@@ -88,7 +90,8 @@ template < class T, int N, int M, class Storage, int D >
 // Split dimension: argmax over j of Σ_i v_i[j].
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] int nliSplitDim(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        f )
 {
     std::array< T, M > totals{};
     for ( Eigen::Index i = 0; i < f.size(); ++i )

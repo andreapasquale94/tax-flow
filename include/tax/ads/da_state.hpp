@@ -40,8 +40,9 @@ namespace detail
 // coefficient via the binomial expansion of (shift + scale·ξ_dim)^a_dim.
 // scale = 0.5 is the split substitution; scale = 2 its inverse (merge).
 template < class T, int N, int M, class Storage >
-[[nodiscard]] tax::TaylorExpansion< T, N, M, Storage > substituteAxis(
-    const tax::TaylorExpansion< T, N, M, Storage >& f, int dim, T shift, T scale ) noexcept
+[[nodiscard]] tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage > substituteAxis(
+    const tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >& f, int dim, T shift,
+    T scale ) noexcept
 {
     // Power tables: shift_pow[p] = shift^p, scale_pow[p] = scale^p
     // (exponents never exceed N — avoids std::pow in the inner loop).
@@ -57,7 +58,7 @@ template < class T, int N, int M, class Storage >
             scale_pow[static_cast< std::size_t >( p - 1 )] * scale;
     }
 
-    tax::TaylorExpansion< T, N, M, Storage > out{};
+    tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage > out{};
     constexpr std::size_t Ncoef = tax::numMonomials( N, M );
     for ( std::size_t k = 0; k < Ncoef; ++k )
     {
@@ -85,8 +86,9 @@ template < class T, int N, int M, class Storage >
 
 // create<P, M[, Storage]>(box, x0): build the identity DA state on box.
 template < int P, int M, class Storage = tax::storage::Dense, class T, int D >
-[[nodiscard]] Eigen::Matrix< tax::TaylorExpansion< T, P, M, Storage >, D, 1 > create(
-    const Box< T, M >& box, const Eigen::Matrix< T, D, 1 >& x0 )
+[[nodiscard]] Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D,
+                             1 >
+create( const Box< T, M >& box, const Eigen::Matrix< T, D, 1 >& x0 )
 {
     // Each box axis i in [0, M) seeds the identity direction of state component i.
     // If D < M, axes [D, M) would silently get no direction (the box would carry
@@ -94,11 +96,11 @@ template < int P, int M, class Storage = tax::storage::Dense, class T, int D >
     static_assert( D == Eigen::Dynamic || D >= M,
                    "ads::create(): state dimension D must be >= M (every box axis must "
                    "map to a state component)." );
-    Eigen::Matrix< tax::TaylorExpansion< T, P, M, Storage >, D, 1 > out;
+    Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D, 1 > out;
     if constexpr ( D == Eigen::Dynamic ) out.resize( x0.size() );
     for ( Eigen::Index i = 0; i < x0.size(); ++i )
     {
-        tax::TaylorExpansion< T, P, M, Storage > comp{};
+        tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage > comp{};
         comp[0] = x0( i );
         if ( i < M )
         {
@@ -114,13 +116,16 @@ template < int P, int M, class Storage = tax::storage::Dense, class T, int D >
 // split(state, parent_box, dim): produce the left/right halves.
 // Deduces Storage from the input.
 template < class T, int N, int M, class Storage, int D >
-[[nodiscard]] std::pair< Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >,
-                         Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 > >
-split( const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& state,
+[[nodiscard]] std::pair<
+    Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >,
+    Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 > >
+split( const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                            1 >& state,
        const Box< T, M >& /*parent_box*/,  // substitution is in normalized coords
        int dim )
 {
-    using State = Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >;
+    using State =
+        Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >;
     State L{ state.size() };
     State R{ state.size() };
     for ( Eigen::Index i = 0; i < state.size(); ++i )
