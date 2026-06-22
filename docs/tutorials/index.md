@@ -60,4 +60,13 @@ scripts in `examples/plot/` turn those into the figures shown here
     under three thruster-reliability scenarios, at the cost of a single
     flow-map propagation per Markov sequence.
 
+-   **[Missed-thrust reachable set](missed_thrust_reachable.md)**
+
+    ---
+
+    The set-valued counterpart: expand in the outage descriptors
+    \((\tau, w, d)\) and let ADS map the *whole* outage box at once, reading
+    off the reachable region — and a robustness heat — with no probabilities
+    and no sampling of the dynamics.
+
 </div>
