@@ -42,8 +42,10 @@ namespace detail
 
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] T maxCoeffDiff(
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& a,
-    const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& b ) noexcept
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        a,
+    const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
+        b ) noexcept
 {
     T worst{ 0 };
     constexpr std::size_t Ncoef = tax::numMonomials( N, M );

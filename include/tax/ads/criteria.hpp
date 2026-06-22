@@ -43,7 +43,9 @@ struct TruncationCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] bool shouldSplit(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f, int depth ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f,
+        int depth ) const
     {
         if ( depth >= maxDepth ) return false;
         return totalTopDegreeMass( f ) > T{ tol };
@@ -51,7 +53,8 @@ struct TruncationCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] int splitDim(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f ) const
     {
         // Coordinate j with the largest sum_{|α|=N, α_j>0} |coeff(α)| · α_j.
         // Graded-lex layout: the degree-N monomials are exactly the
@@ -90,7 +93,8 @@ struct TruncationCriterion
    private:
     template < class T, int N, int M, class Storage, int D >
     static T totalTopDegreeMass(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f )
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f )
     {
         // Graded-lex layout: the degree-N monomials are exactly the
         // contiguous tail block [numMonomials(N-1, M), numMonomials(N, M)).
@@ -113,7 +117,9 @@ struct NliCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] bool shouldSplit(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f, int depth ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f,
+        int depth ) const
     {
         if ( depth >= maxDepth ) return false;
         return tax::ads::detail::nonlinearityIndex( f ) > tol;
@@ -121,7 +127,8 @@ struct NliCriterion
 
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] int splitDim(
-        const Eigen::Matrix< tax::TaylorExpansion< T, N, M, Storage >, D, 1 >& f ) const
+        const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
+                             1 >& f ) const
     {
         return tax::ads::detail::nliSplitDim( f );
     }

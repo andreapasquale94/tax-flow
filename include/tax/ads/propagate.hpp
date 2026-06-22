@@ -34,7 +34,7 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
                               const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
                               tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1 )
 {
-    using TE = tax::TaylorExpansion< T, P, M, tax::storage::Dense >;
+    using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
     using Stepper = tax::ode::detail::StepperT< Method, DAState >;
 
