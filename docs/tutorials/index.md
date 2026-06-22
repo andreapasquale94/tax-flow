@@ -43,4 +43,12 @@ scripts in `examples/plot/` turn those into the figures shown here
     CR3BP, where the exponential stretching of the flow makes domain
     splitting unavoidable — and predictable.
 
+-   **[Low-thrust reachability](reachability.md)**
+
+    ---
+
+    Expand the *control* instead of the initial state: propagate a whole
+    set of thrust choices at once and read off the reachable-set envelope
+    over one orbit, for a 1000 kg spacecraft and a 24U CubeSat.
+
 </div>

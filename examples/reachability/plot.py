@@ -4,7 +4,7 @@
 Render the low-thrust reachable set from one or more JSON files (written by the
 `reachability` example). Each file produces one panel in a side-by-side figure.
 Snapshot envelopes are drawn as NON-FILLED outlines, coloured by t / T, overlaid
-on the ballistic reference orbit.  A single shared viridis colour bar encodes t/T.
+on the ballistic reference orbit.  A single shared Blues colour bar encodes t/T.
 
 Usage:
     python3 plot.py [files ...] [--out PATH]
@@ -17,9 +17,10 @@ import argparse
 import json
 import pathlib
 
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 
 plt.rcParams.update(
     {
@@ -58,9 +59,12 @@ def main() -> None:
 
     datasets = [load(f) for f in args.files]
 
-    # Shared colour mapping across all panels.
+    # Shared colour mapping across all panels. Blues_r, sampled over [0.0, 0.8]
+    # so the latest snapshots stay visible rather than fading into white.
     norm = Normalize(0.0, 1.0)
-    cmap = plt.get_cmap("viridis")
+    cmap = LinearSegmentedColormap.from_list(
+        "blues_r_hi", plt.get_cmap("Blues_r")(np.linspace(0.0, 0.8, 256))
+    )
 
     # Compute shared x/y limits from all reference orbits + all envelope points.
     all_x, all_y = [], []
@@ -114,26 +118,17 @@ def main() -> None:
                 # NON-FILLED: outline only.
                 ax.plot(leaf["x"], leaf["y"], color=color, lw=lw, alpha=0.9, zorder=zo)
 
-        # Add a red proxy for the final-snapshot legend entry.
-        import matplotlib.lines as mlines
-        final_handle = mlines.Line2D([], [], color="red", lw=1.5, label="final ($t=T$)")
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         ax.set_aspect("equal")
         ax.set_xlabel("$x$")
         ax.set_ylabel("$y$")
-        ax.legend(handles=[*ax.get_legend_handles_labels()[0], final_handle],
-                  loc="upper left", fontsize=9)
 
         # Title from params.case (already JSON-quoted in file; strip quotes).
         case_label = params.get("case", "")
         if case_label.startswith('"') and case_label.endswith('"'):
             case_label = case_label[1:-1]
-        a_max_val = params.get("a_max", None)
-        title = case_label
-        if a_max_val is not None:
-            title += f"\n$a_{{\\max}}$ = {a_max_val:.4f}"
-        ax.set_title(title)
+        ax.set_title(case_label)
 
     # Single shared colour bar on the right of the last panel.
     sm = ScalarMappable(norm=norm, cmap=cmap)

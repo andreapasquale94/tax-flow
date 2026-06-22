@@ -91,7 +91,7 @@ int main( int argc, char** argv )
     constexpr int M = 2;  // control DA variables (m, theta)
     constexpr int D = 6;  // state dimension
 
-    constexpr int kNTheta = 192;  // samples along the max-thrust ring (smooth closed envelope)
+    constexpr int kNTheta = 360;  // samples along the max-thrust ring (one per degree)
     const double t_final = kPeriod;
 
     tax::ode::IntegratorConfig< double > cfg;

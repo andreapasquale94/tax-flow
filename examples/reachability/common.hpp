@@ -63,12 +63,9 @@ struct Preset
 };
 
 // 1000 kg spacecraft, 100 mN  -> a_max ~ 0.0169.
-inline constexpr Preset kSpacecraft{ "1000 kg spacecraft, 100 mN", 0.100, 1000.0,
-                                     "reachability.json" };
-// 24U CubeSat: 40 kg, 1.4 mN (Busek BIT-3 gridded ion, flown on interplanetary
-// CubeSats) -> a_max ~ 0.0059.
-inline constexpr Preset kCubeSat{ "24U CubeSat, 40 kg, 1.4 mN", 0.0014, 40.0,
-                                  "reachability_cubesat.json" };
+inline constexpr Preset kSpacecraft{ "1000 kg, 100 mN", 0.100, 1000.0, "reachability.json" };
+// 24U CubeSat: 40 kg, 2 mN  -> a_max ~ 0.0084.
+inline constexpr Preset kCubeSat{ "40 kg, 2 mN", 0.002, 40.0, "reachability_cubesat.json" };
 
 [[nodiscard]] inline constexpr double aMax( const Preset& p )
 {
