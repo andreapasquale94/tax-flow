@@ -51,4 +51,13 @@ scripts in `examples/plot/` turn those into the figures shown here
     set of thrust choices at once and read off the reachable-set envelope
     over one orbit, for a 1000 kg spacecraft and a 24U CubeSat.
 
+-   **[Missed-thrust dispersion](missed_thrust.md)**
+
+    ---
+
+    Monte-Carlo Markov-chain outages meet a DA polynomial surrogate for
+    execution errors: build the 1/2/3σ dispersion set over one revolution
+    under three thruster-reliability scenarios, at the cost of a single
+    flow-map propagation per Markov sequence.
+
 </div>
