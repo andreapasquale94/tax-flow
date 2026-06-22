@@ -45,13 +45,13 @@ using example::unitSquareBoundary;
 inline constexpr double kR0 = 1.0;         // circular radius (Earth sma, normalized)
 inline constexpr double kV0 = 1.0;         // circular speed sqrt(mu/r0)
 inline const double kPeriod = 2.0 * M_PI;  // one orbital period
-// Spacecraft control authority: 250 mN max thrust on a 1000 kg spacecraft
-//   a_phys = F / m = 0.250 N / 1000 kg = 2.5e-4 m/s^2.
+// Spacecraft control authority: 100 mN max thrust on a 1000 kg spacecraft
+//   a_phys = F / m = 0.100 N / 1000 kg = 1.0e-4 m/s^2.
 // Normalized by the 1-AU acceleration unit  mu_sun / (1 AU)^2 = 5.9301e-3 m/s^2.
-inline constexpr double kThrustNewton = 0.250;   // 250 mN
+inline constexpr double kThrustNewton = 0.100;   // 100 mN
 inline constexpr double kMassKg = 1000.0;        // spacecraft mass
 inline constexpr double kAccelUnit = 5.9301e-3;  // m/s^2 at 1 AU (= mu_sun / LU^2)
-inline constexpr double kAmax = ( kThrustNewton / kMassKg ) / kAccelUnit;  // ~0.0422
+inline constexpr double kAmax = ( kThrustNewton / kMassKg ) / kAccelUnit;  // ~0.0169
 inline constexpr double kDaysPerYear = 365.25;
 inline const double kTUperDay = 2.0 * M_PI / kDaysPerYear;  // 1 day in TU
 inline constexpr int kSnapStepDays = 10;                    // snapshot cadence

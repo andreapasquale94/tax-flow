@@ -5,19 +5,60 @@
 // constant (magnitude, direction-from-velocity) over one revolution.
 //
 // One ADS propagation per snapshot time (every 10 days) over the 2-D
-// control box (m, theta); each leaf is the image of a control sub-box.
-// The reachable boundary is drawn as non-filled outlines (plot.py).
+// control box (m, theta); each snapshot draws ONE envelope (outer boundary
+// of the reachable set); the underlying ADS leaf count is reported in the
+// banner. The envelope outline is drawn by plot.py.
 //
 // Run:    ./reachability
 // Writes: reachability.json   (plot with examples/reachability/plot.py)
 // =============================================================================
 
+#include <cmath>
 #include <string>
 #include <tax/ads.hpp>
 #include <tax/ode.hpp>
 #include <vector>
 
 #include "common.hpp"
+
+namespace
+{
+
+// Outer envelope of the reachable set at one snapshot: trace the full
+// control-box perimeter and evaluate each point through the ADS leaf that
+// contains it, so accuracy is preserved across ADS splits. Returns one
+// closed polygon = the reachable-set boundary (position components x=2, y=3).
+template < class Tree >
+example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double, 2 >& full_box,
+                                  const std::vector< std::array< double, 2 > >& boundary )
+{
+    example::Polygon p;
+    p.x.reserve( boundary.size() );
+    p.y.reserve( boundary.size() );
+    for ( const auto& ab : boundary )
+    {
+        const double m = full_box.center( 0 ) + full_box.halfWidth( 0 ) * ab[0];
+        const double th = full_box.center( 1 ) + full_box.halfWidth( 1 ) * ab[1];
+        for ( int li : tree.done() )
+        {
+            const auto& leaf = tree.leaf( li );
+            const double dm = m - leaf.box.center( 0 );
+            const double dt = th - leaf.box.center( 1 );
+            if ( std::abs( dm ) <= leaf.box.halfWidth( 0 ) + 1e-9 &&
+                 std::abs( dt ) <= leaf.box.halfWidth( 1 ) + 1e-9 )
+            {
+                const std::array< double, 2 > loc{ dm / leaf.box.halfWidth( 0 ),
+                                                   dt / leaf.box.halfWidth( 1 ) };
+                p.x.push_back( leaf.payload( 2 ).eval( loc ) );
+                p.y.push_back( leaf.payload( 3 ).eval( loc ) );
+                break;
+            }
+        }
+    }
+    return p;
+}
+
+}  // namespace
 
 int main()
 {
@@ -48,23 +89,24 @@ int main()
     const auto reference = sampleOrbit( ref_sol, {}, D );
 
     // ---- One ADS propagation per snapshot time -------------------------------
+    const auto full_box = controlBox();
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
     Stopwatch clock;
     for ( double t : snap_times )
     {
-        auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), controlBox(),
-                                              icCenter(), 0.0, t, cfg, adsThreads() );
-        Snapshot snap{ t, {} };
-        int id = 0;
+        auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box, icCenter(),
+                                              0.0, t, cfg, adsThreads() );
+        int n_leaves = 0;
         for ( int li : tree.done() )
         {
-            const auto& leaf = tree.leaf( li );
-            snap.leaves.push_back( evalPolygon( leaf.payload, boundary, boundaryToBox, id++,
-                                                leaf.depth, /*ix=*/2, /*iy=*/3 ) );
+            (void)li;
+            ++n_leaves;
         }
-        leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( snap.leaves.size() );
+        Snapshot snap{ t, {} };
+        snap.leaves.push_back( envelopePolygon( tree, full_box, boundary ) );
+        leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( n_leaves );
         snapshots.push_back( std::move( snap ) );
     }
     const double elapsed_ms = clock.ms();
