@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """examples/reachability/plot.py
 
-Render the low-thrust reachable set from reachability.json (written by the
-`reachability` example). Each snapshot's ADS leaves are drawn as NON-FILLED
-outlines, coloured by t / T, overlaid on the ballistic reference orbit.
+Render the low-thrust reachable set from one or more JSON files (written by the
+`reachability` example). Each file produces one panel in a side-by-side figure.
+Snapshot envelopes are drawn as NON-FILLED outlines, coloured by t / T, overlaid
+on the ballistic reference orbit.  A single shared viridis colour bar encodes t/T.
 
 Usage:
-    python3 plot.py [--data DIR] [--out DIR]
+    python3 plot.py [files ...] [--out PATH]
 
-Output: reachability.png
+    files   one or more reachability JSON paths  (default: reachability.json)
+    --out   output PNG path                       (default: reachability.png)
 """
 
 import argparse
@@ -39,46 +41,96 @@ def load(path: pathlib.Path):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--data", type=pathlib.Path, default=".",
-                    help="directory containing reachability.json")
-    ap.add_argument("--out", type=pathlib.Path, default=".",
-                    help="output directory for the PNG")
+    ap.add_argument(
+        "files",
+        nargs="*",
+        type=pathlib.Path,
+        default=[pathlib.Path("reachability.json")],
+        help="one or more reachability JSON files",
+    )
+    ap.add_argument(
+        "--out",
+        type=pathlib.Path,
+        default=pathlib.Path("reachability.png"),
+        help="output PNG path",
+    )
     args = ap.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
 
-    d = load(args.data / "reachability.json")
-    snaps = d["snapshots"]
-    ref = d["reference_orbit"]
-    t_final = d["params"]["t_final"]
+    datasets = [load(f) for f in args.files]
 
-    fig, ax = plt.subplots(figsize=(7.4, 6.8))
-
-    # Reference (ballistic) orbit: position is state components x2, x3.
-    ax.plot(ref["x2"], ref["x3"], color="0.55", lw=1.0, zorder=1,
-            label="ballistic orbit")
-    ax.scatter([0], [0], marker="o", s=120, color="#f2b134", edgecolor="0.3",
-               zorder=5, label="Sun")
-
+    # Shared colour mapping across all panels.
     norm = Normalize(0.0, 1.0)
     cmap = plt.get_cmap("viridis")
-    for snap in snaps:
-        color = cmap(norm(snap["t"] / t_final))
-        for leaf in snap["leaves"]:
-            # NON-FILLED: outline only.
-            ax.plot(leaf["x"], leaf["y"], color=color, lw=0.9, alpha=0.9, zorder=3)
 
+    # Compute shared x/y limits from all reference orbits + all envelope points.
+    all_x, all_y = [], []
+    for d in datasets:
+        ref = d["reference_orbit"]
+        all_x.extend(ref["x2"])
+        all_y.extend(ref["x3"])
+        for snap in d["snapshots"]:
+            for leaf in snap["leaves"]:
+                all_x.extend(leaf["x"])
+                all_y.extend(leaf["y"])
+    # Add Sun origin.
+    all_x.append(0.0)
+    all_y.append(0.0)
+
+    margin = 0.05
+    x_range = max(all_x) - min(all_x)
+    y_range = max(all_y) - min(all_y)
+    xlim = (min(all_x) - margin * x_range, max(all_x) + margin * x_range)
+    ylim = (min(all_y) - margin * y_range, max(all_y) + margin * y_range)
+
+    n = len(datasets)
+    fig_w = 7.0 * n + 0.8  # extra width for colour bar
+    fig, axes = plt.subplots(1, n, figsize=(fig_w, 6.8), squeeze=False)
+    axes = axes[0]  # list of Axes
+
+    for ax, d in zip(axes, datasets):
+        params = d["params"]
+        snaps = d["snapshots"]
+        ref = d["reference_orbit"]
+        t_final = params["t_final"]
+
+        # Ballistic reference orbit.
+        ax.plot(ref["x2"], ref["x3"], color="0.55", lw=1.0, zorder=1,
+                label="ballistic orbit")
+        ax.scatter([0], [0], marker="o", s=120, color="#f2b134", edgecolor="0.3",
+                   zorder=5, label="Sun")
+
+        # Envelope outlines coloured by t/T.
+        for snap in snaps:
+            color = cmap(norm(snap["t"] / t_final))
+            for leaf in snap["leaves"]:
+                # NON-FILLED: outline only.
+                ax.plot(leaf["x"], leaf["y"], color=color, lw=0.9, alpha=0.9, zorder=3)
+
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_aspect("equal")
+        ax.set_xlabel("$x$")
+        ax.set_ylabel("$y$")
+        ax.legend(loc="upper left", fontsize=9)
+
+        # Title from params.case (already JSON-quoted in file; strip quotes).
+        case_label = params.get("case", "")
+        if case_label.startswith('"') and case_label.endswith('"'):
+            case_label = case_label[1:-1]
+        a_max_val = params.get("a_max", None)
+        title = case_label
+        if a_max_val is not None:
+            title += f"\n$a_{{\\max}}$ = {a_max_val:.4f}"
+        ax.set_title(title)
+
+    # Single shared colour bar on the right of the last panel.
     sm = ScalarMappable(norm=norm, cmap=cmap)
-    cbar = fig.colorbar(sm, ax=ax, fraction=0.04, pad=0.02)
+    cbar = fig.colorbar(sm, ax=axes[-1], fraction=0.04, pad=0.02)
     cbar.set_label("$t\\,/\\,T$")
 
-    ax.set_xlabel("$x$")
-    ax.set_ylabel("$y$")
-    ax.set_aspect("equal")
-    ax.legend(loc="upper left")
-    ax.set_title("Low-thrust reachable set over one orbit")
-
     fig.tight_layout()
-    out_path = args.out / "reachability.png"
+    out_path = args.out
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150)
     print(f"wrote {out_path}")
 

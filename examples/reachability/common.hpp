@@ -45,16 +45,35 @@ using example::unitSquareBoundary;
 inline constexpr double kR0 = 1.0;         // circular radius (Earth sma, normalized)
 inline constexpr double kV0 = 1.0;         // circular speed sqrt(mu/r0)
 inline const double kPeriod = 2.0 * M_PI;  // one orbital period
-// Spacecraft control authority: 100 mN max thrust on a 1000 kg spacecraft
-//   a_phys = F / m = 0.100 N / 1000 kg = 1.0e-4 m/s^2.
-// Normalized by the 1-AU acceleration unit  mu_sun / (1 AU)^2 = 5.9301e-3 m/s^2.
-inline constexpr double kThrustNewton = 0.100;   // 100 mN
-inline constexpr double kMassKg = 1000.0;        // spacecraft mass
+// Acceleration unit: mu_sun / (1 AU)^2 = 5.9301e-3 m/s^2.
 inline constexpr double kAccelUnit = 5.9301e-3;  // m/s^2 at 1 AU (= mu_sun / LU^2)
-inline constexpr double kAmax = ( kThrustNewton / kMassKg ) / kAccelUnit;  // ~0.0169
 inline constexpr double kDaysPerYear = 365.25;
 inline const double kTUperDay = 2.0 * M_PI / kDaysPerYear;  // 1 day in TU
 inline constexpr int kSnapStepDays = 10;                    // snapshot cadence
+
+// ---- Spacecraft presets ----------------------------------------------------
+// A spacecraft preset: max thrust (N), mass (kg), a human label, and the
+// output JSON filename. a_max (normalized) = (thrust/mass) / kAccelUnit.
+struct Preset
+{
+    const char* name;
+    double thrustN;
+    double massKg;
+    const char* outfile;
+};
+
+// 1000 kg spacecraft, 100 mN  -> a_max ~ 0.0169.
+inline constexpr Preset kSpacecraft{ "1000 kg spacecraft, 100 mN", 0.100, 1000.0,
+                                     "reachability.json" };
+// 24U CubeSat: 40 kg, 1.4 mN (Busek BIT-3 gridded ion, flown on interplanetary
+// CubeSats) -> a_max ~ 0.0059.
+inline constexpr Preset kCubeSat{ "24U CubeSat, 40 kg, 1.4 mN", 0.0014, 40.0,
+                                  "reachability_cubesat.json" };
+
+[[nodiscard]] inline constexpr double aMax( const Preset& p )
+{
+    return ( p.thrustN / p.massKg ) / kAccelUnit;
+}
 
 // ---- Right-hand side --------------------------------------------------------
 //
@@ -102,10 +121,10 @@ inline auto rhs()
 // ---- State IC (D = 6) -------------------------------------------------------
 // Control center: mid-magnitude, theta = pi (so theta spans [0, 2*pi]).
 // Physical center: the circular orbit periapsis-equivalent (x=1, vy=1).
-// The first M = 2 entries must equal controlBox().center.
-inline tax::la::VecNT< 6, double > icCenter()
+// The first M = 2 entries must equal controlBox(a_max).center.
+inline tax::la::VecNT< 6, double > icCenter( double a_max )
 {
-    return tax::la::VecNT< 6, double >{ kAmax / 2.0, M_PI, kR0, 0.0, 0.0, kV0 };
+    return tax::la::VecNT< 6, double >{ a_max / 2.0, M_PI, kR0, 0.0, 0.0, kV0 };
 }
 
 // Ballistic (no-thrust) IC for the reference underlay: m = 0.
@@ -117,9 +136,9 @@ inline tax::la::VecNT< 6, double > ballisticCenter()
 // ---- Control box (M = 2) ----------------------------------------------------
 // axis 0: m     in [0, a_max]   (center a_max/2, half-width a_max/2)
 // axis 1: theta in [0, 2*pi]    (center pi,      half-width pi)
-inline tax::ads::Box< double, 2 > controlBox()
+inline tax::ads::Box< double, 2 > controlBox( double a_max )
 {
-    return tax::ads::Box< double, 2 >{ { kAmax / 2.0, M_PI }, { kAmax / 2.0, M_PI } };
+    return tax::ads::Box< double, 2 >{ { a_max / 2.0, M_PI }, { a_max / 2.0, M_PI } };
 }
 
 // ---- Boundary coordinates -> normalized M=2 control point -------------------

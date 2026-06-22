@@ -9,8 +9,11 @@
 // of the reachable set); the underlying ADS leaf count is reported in the
 // banner. The envelope outline is drawn by plot.py.
 //
-// Run:    ./reachability
-// Writes: reachability.json   (plot with examples/reachability/plot.py)
+// Run:    ./reachability [spacecraft|cubesat]
+// Writes: reachability.json            (spacecraft preset, default)
+//         reachability_cubesat.json    (cubesat preset)
+// Plot with: python3 examples/reachability/plot.py reachability.json \
+//                    reachability_cubesat.json --out reachability_compare.png
 // =============================================================================
 
 #include <cmath>
@@ -60,11 +63,24 @@ example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double,
 
 }  // namespace
 
-int main()
+int main( int argc, char** argv )
 {
     using namespace example;
     using namespace example::reachability;
     using namespace tax::ode::methods;
+
+    // ---- Select preset from command line -------------------------------------
+    const Preset& preset = [&]() -> const Preset& {
+        if ( argc > 1 )
+        {
+            const std::string arg( argv[1] );
+            if ( arg == "cubesat" ) return kCubeSat;
+            if ( arg == "spacecraft" ) return kSpacecraft;
+        }
+        return kSpacecraft;
+    }();
+
+    const double a_max = aMax( preset );
 
     constexpr int P = 6;  // DA truncation order
     constexpr int M = 2;  // control DA variables (m, theta)
@@ -89,15 +105,15 @@ int main()
     const auto reference = sampleOrbit( ref_sol, {}, D );
 
     // ---- One ADS propagation per snapshot time -------------------------------
-    const auto full_box = controlBox();
+    const auto full_box = controlBox( a_max );
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
     Stopwatch clock;
     for ( double t : snap_times )
     {
-        auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box, icCenter(),
-                                              0.0, t, cfg, adsThreads() );
+        auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box,
+                                              icCenter( a_max ), 0.0, t, cfg, adsThreads() );
         int n_leaves = 0;
         for ( int li : tree.done() )
         {
@@ -112,12 +128,15 @@ int main()
     const double elapsed_ms = clock.ms();
 
     // ---- Output --------------------------------------------------------------
-    writeRunJson( "reachability.json", "ads",
+    writeRunJson( preset.outfile, "ads",
                   { { "P", std::to_string( P ) },
                     { "M", std::to_string( M ) },
                     { "D", std::to_string( D ) },
                     { "t_final", jsonNumber( t_final ) },
-                    { "a_max", jsonNumber( kAmax ) },
+                    { "case", std::string( "\"" ) + preset.name + "\"" },
+                    { "thrust_mN", jsonNumber( preset.thrustN * 1000 ) },
+                    { "mass_kg", jsonNumber( preset.massKg ) },
+                    { "a_max", jsonNumber( a_max ) },
                     { "snap_step_days", std::to_string( kSnapStepDays ) },
                     { "criterion", "\"truncation\"" },
                     { "tol", jsonNumber( criterion.tol ) },
@@ -125,13 +144,14 @@ int main()
                   reference, snapshots, elapsed_ms );
 
     printBanner( "reachability — low-thrust reachable set (constant thrust over one orbit)",
-                 { { "P, M, D", std::to_string( P ) + ", " + std::to_string( M ) + ", " +
+                 { { "case", preset.name },
+                   { "P, M, D", std::to_string( P ) + ", " + std::to_string( M ) + ", " +
                                     std::to_string( D ) },
-                   { "a_max", std::to_string( kAmax ) },
+                   { "a_max", std::to_string( a_max ) },
                    { "snapshots", std::to_string( snapshots.size() ) + " (every " +
                                       std::to_string( kSnapStepDays ) + " days)" },
                    { "leaves per snap", leaf_counts },
                    { "elapsed", std::to_string( elapsed_ms ) + " ms" },
-                   { "output", "reachability.json" } } );
+                   { "output", preset.outfile } } );
     return 0;
 }
