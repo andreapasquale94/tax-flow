@@ -27,21 +27,26 @@
 namespace
 {
 
-// Outer envelope of the reachable set at one snapshot: trace the full
-// control-box perimeter and evaluate each point through the ADS leaf that
-// contains it, so accuracy is preserved across ADS splits. Returns one
-// closed polygon = the reachable-set boundary (position components x=2, y=3).
+// Outer envelope of the reachable set at one snapshot: the MAX-THRUST edge
+// (m = a_max) swept over the full direction range theta in [0, 2pi]. Each
+// sample is evaluated through the ADS leaf that contains it, so accuracy is
+// preserved across splits. Returns one closed polygon = the reachable-set
+// boundary (position components x = 2, y = 3). Tracing only this edge avoids
+// the radial spoke that a full control-box-perimeter trace would draw (the
+// m = 0 edge collapses to a point and the theta seam doubles back).
 template < class Tree >
 example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double, 2 >& full_box,
-                                  const std::vector< std::array< double, 2 > >& boundary )
+                                  int n_theta )
 {
     example::Polygon p;
-    p.x.reserve( boundary.size() );
-    p.y.reserve( boundary.size() );
-    for ( const auto& ab : boundary )
+    p.x.reserve( static_cast< std::size_t >( n_theta ) + 1 );
+    p.y.reserve( static_cast< std::size_t >( n_theta ) + 1 );
+    const double m = full_box.center( 0 ) + full_box.halfWidth( 0 );  // xi_m = +1 => m = a_max
+    for ( int i = 0; i <= n_theta; ++i )
     {
-        const double m = full_box.center( 0 ) + full_box.halfWidth( 0 ) * ab[0];
-        const double th = full_box.center( 1 ) + full_box.halfWidth( 1 ) * ab[1];
+        const double xitheta =
+            -1.0 + 2.0 * static_cast< double >( i ) / static_cast< double >( n_theta );
+        const double th = full_box.center( 1 ) + full_box.halfWidth( 1 ) * xitheta;
         for ( int li : tree.done() )
         {
             const auto& leaf = tree.leaf( li );
@@ -86,7 +91,7 @@ int main( int argc, char** argv )
     constexpr int M = 2;  // control DA variables (m, theta)
     constexpr int D = 6;  // state dimension
 
-    constexpr int kNPerEdge = 24;
+    constexpr int kNTheta = 192;  // samples along the max-thrust ring (smooth closed envelope)
     const double t_final = kPeriod;
 
     tax::ode::IntegratorConfig< double > cfg;
@@ -106,7 +111,6 @@ int main( int argc, char** argv )
 
     // ---- One ADS propagation per snapshot time -------------------------------
     const auto full_box = controlBox( a_max );
-    const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
     Stopwatch clock;
@@ -121,7 +125,7 @@ int main( int argc, char** argv )
             ++n_leaves;
         }
         Snapshot snap{ t, {} };
-        snap.leaves.push_back( envelopePolygon( tree, full_box, boundary ) );
+        snap.leaves.push_back( envelopePolygon( tree, full_box, kNTheta ) );
         leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( n_leaves );
         snapshots.push_back( std::move( snap ) );
     }

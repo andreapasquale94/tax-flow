@@ -99,19 +99,31 @@ def main() -> None:
         ax.scatter([0], [0], marker="o", s=120, color="#f2b134", edgecolor="0.3",
                    zorder=5, label="Sun")
 
-        # Envelope outlines coloured by t/T.
-        for snap in snaps:
-            color = cmap(norm(snap["t"] / t_final))
+        # Envelope outlines coloured by t/T; final snapshot highlighted in red.
+        for idx, snap in enumerate(snaps):
+            is_last = idx == len(snaps) - 1
+            if is_last:
+                color = "red"
+                lw = 1.5
+                zo = 4
+            else:
+                color = cmap(norm(snap["t"] / t_final))
+                lw = 0.9
+                zo = 3
             for leaf in snap["leaves"]:
                 # NON-FILLED: outline only.
-                ax.plot(leaf["x"], leaf["y"], color=color, lw=0.9, alpha=0.9, zorder=3)
+                ax.plot(leaf["x"], leaf["y"], color=color, lw=lw, alpha=0.9, zorder=zo)
 
+        # Add a red proxy for the final-snapshot legend entry.
+        import matplotlib.lines as mlines
+        final_handle = mlines.Line2D([], [], color="red", lw=1.5, label="final ($t=T$)")
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         ax.set_aspect("equal")
         ax.set_xlabel("$x$")
         ax.set_ylabel("$y$")
-        ax.legend(loc="upper left", fontsize=9)
+        ax.legend(handles=[*ax.get_legend_handles_labels()[0], final_handle],
+                  loc="upper left", fontsize=9)
 
         # Title from params.case (already JSON-quoted in file; strip quotes).
         case_label = params.get("case", "")
