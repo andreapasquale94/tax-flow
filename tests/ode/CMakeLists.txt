@@ -23,6 +23,7 @@ tax_add_test(test_ode_fixed_step     SOURCES test_fixed_step.cpp)
 tax_add_test(test_ode_vector_ops     SOURCES test_vector_ops.cpp)
 tax_add_test(test_ode_rk_da_state    SOURCES test_rk_da_state.cpp)
 tax_add_test(test_ode_named_state    SOURCES test_named_state.cpp)
+tax_add_test(test_ode_mixed_state    SOURCES test_mixed_state.cpp)
 tax_add_test(test_ode_rk_helpers     SOURCES test_rk_helpers.cpp)
 
 # ---- Integrator driver --------------------------------------------------
