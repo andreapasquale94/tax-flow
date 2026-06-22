@@ -27,7 +27,8 @@ template < class S >
 concept NamedExpansion = requires( S s, const S cs ) {
     typename S::Inner;
     { S::Inner::nCoefficients } -> std::convertible_to< std::size_t >;
-    { cs.inner()[std::size_t{ 0 }] };
+    { s.inner()[std::size_t{ 0 }] };   // mutable inner() accessible
+    { cs.inner()[std::size_t{ 0 }] };  // const inner() accessible
 };
 
 template < NamedExpansion S >
