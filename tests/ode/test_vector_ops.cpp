@@ -86,3 +86,20 @@ TEST( OdeVectorOps, EigenVectorOfTaylorExpansion )
     EXPECT_DOUBLE_EQ( y( 0 )[0], 2.0 - 1.0 );
     EXPECT_DOUBLE_EQ( y( 1 )[0], -1.0 + 0.5 );
 }
+
+TEST( OdeVectorOps, MixedSchemeDenseExpansion )
+{
+    // x.inner() is TaylorExpansion<double, MixedScheme<...>, Dense> — the
+    // generic-Scheme VectorOps path must handle it just like an isotropic TE.
+    auto x = tax::mixed::variable< "x", 3 >( 0.5 );  // axis "x", dim 1, order 3
+    using Inner = std::decay_t< decltype( x.inner() ) >;
+
+    Inner a = x.inner();  // coeff[0]=0.5, coeff[1]=1.0 (the linear term)
+    Inner y{};
+    tax::ode::VectorOps< Inner >::scale_assign( y, 4.0, a );
+    EXPECT_DOUBLE_EQ( y[0], 2.0 );                                       // 4*0.5
+    EXPECT_DOUBLE_EQ( tax::ode::VectorOps< Inner >::norm( y ), 4.0 );    // 4*1.0
+
+    tax::ode::VectorOps< Inner >::axpy( y, -1.0, a );
+    EXPECT_DOUBLE_EQ( y[0], 2.0 - 0.5 );
+}

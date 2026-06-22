@@ -14,7 +14,7 @@
 //
 // Default specializations cover:
 //   - floating-point scalars
-//   - tax::TaylorExpansion<T, N, M, storage::Dense>  (sup over coefficients)
+//   - tax::TaylorExpansion<T, Scheme, storage::Dense> (sup over coefficients)
 //   - Eigen::Matrix<T, D, 1>          (recurses element-wise)
 //
 // To support a new state type, specialize VectorOps<MyState> with the
@@ -55,11 +55,14 @@ struct VectorOps< T >
     }
 };
 
-// ---- tax::TaylorExpansion<T, N, M, storage::Dense> ----
-template < class T, int N, int M >
-struct VectorOps< TaylorExpansion< T, N, M, storage::Dense > >
+// ---- tax::TaylorExpansion<T, Scheme, storage::Dense> ----
+// Generic over the index Scheme, so it covers both IsotropicScheme<N,M>
+// (simplex) and MixedScheme<Group...> (box / per-axis order) expansions.
+// The body only iterates S::nCoefficients, so no per-scheme logic is needed.
+template < class T, class Scheme >
+struct VectorOps< TaylorExpansion< T, Scheme, storage::Dense > >
 {
-    using S = TaylorExpansion< T, N, M, storage::Dense >;
+    using S = TaylorExpansion< T, Scheme, storage::Dense >;
 
     [[nodiscard]] static double norm( const S& x ) noexcept
     {
