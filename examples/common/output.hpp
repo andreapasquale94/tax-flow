@@ -153,10 +153,11 @@ struct Snapshot
  * components of `state` (an Eigen vector of TaylorExpansions) at each
  * boundary sample. `toBox(a, b)` maps the two active boundary coordinates
  * to the M-dimensional normalised displacement (problem-specific).
+ * The optional ix, iy select which state components are plotted (default 0, 1).
  */
 template < class StateVec, class ToBox >
 Polygon evalPolygon( const StateVec& state, const std::vector< std::array< double, 2 > >& boundary,
-                     ToBox&& toBox, int id = 0, int depth = 0 )
+                     ToBox&& toBox, int id = 0, int depth = 0, int ix = 0, int iy = 1 )
 {
     Polygon p;
     p.id = id;
@@ -166,8 +167,8 @@ Polygon evalPolygon( const StateVec& state, const std::vector< std::array< doubl
     for ( const auto& ab : boundary )
     {
         const auto d = toBox( ab[0], ab[1] );
-        p.x.push_back( state( 0 ).eval( d ) );
-        p.y.push_back( state( 1 ).eval( d ) );
+        p.x.push_back( state( ix ).eval( d ) );
+        p.y.push_back( state( iy ).eval( d ) );
     }
     return p;
 }
