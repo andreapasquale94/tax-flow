@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """examples/transfer_dispersion/plot.py
 
-Dispersion sets of the low-thrust Earth -> NEA transfer. For each thrust level
-(columns) and each uncertainty case (rows: initial / thrust / both) the DA box
-is propagated through the nominal transfer and sampled at snapshots; this plots
-the convex hull of each dispersion set RELATIVE to the nominal trajectory (in
-km), coloured by t/T (final set in red) so the growth and shape are visible.
+Dispersion sets of the low-thrust Earth -> NEA transfer, shown ON the transfer
+in the Sun-Earth ROTATING frame (Earth fixed at (1,0)). For each thrust level
+(columns) and uncertainty case (rows: initial / thrust / both) the DA box is
+propagated and sampled at snapshots; the convex hull of each dispersion set is
+drawn at its actual position and scale along the nominal trajectory, coloured
+by t/T (final set in red).
 
 Usage:
     python3 plot.py [files ...] [--out transfer_dispersion.png]
@@ -20,13 +21,11 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from scipy.spatial import ConvexHull
 
-AU_KM = 1.495978707e8
 CASES = ["initial", "thrust", "both"]
 CASE_LABEL = {"initial": "initial dispersion\n(±1000 km, ±1 m/s)",
               "thrust": "thrust dispersion\n(±2%, ±5°)",
               "both": "both combined"}
 DEFAULT = [pathlib.Path(f"transfer_dispersion_{l}.json") for l in ("low", "med", "high")]
-
 plt.rcParams.update({"figure.facecolor": "white", "font.size": 10,
                      "xtick.direction": "in", "ytick.direction": "in"})
 
@@ -36,26 +35,23 @@ def load(p):
         return json.load(f)
 
 
-def hull_xy(snap):
-    """Dispersion-set hull for one snapshot, in the nominal radial-transverse
-    (RTN) frame (km): x = transverse (along-track), y = radial."""
-    cx, cy = snap["c"]
-    cn = np.hypot(cx, cy)
-    rh = np.array([cx, cy]) / cn          # radial unit
-    th = np.array([-cy, cx]) / cn         # transverse unit (perp, prograde)
-    dx = (np.asarray(snap["x"]) - cx) * AU_KM
-    dy = (np.asarray(snap["y"]) - cy) * AU_KM
-    dt = dx * th[0] + dy * th[1]          # transverse component
-    dr = dx * rh[0] + dy * rh[1]          # radial component
-    pts = np.column_stack([dt, dr])
-    if np.ptp(dt) < 1e-9 and np.ptp(dr) < 1e-9:
-        return None
-    try:
-        h = ConvexHull(pts)
-        v = np.r_[h.vertices, h.vertices[0]]
-        return pts[v, 0], pts[v, 1]
-    except Exception:
-        return None
+def rot(tabs, x, y):
+    """Inertial -> Sun-Earth rotating frame (rotate by -tabs)."""
+    c, s = np.cos(tabs), np.sin(tabs)
+    return c * x + s * y, -s * x + c * y
+
+
+def nea_state(nea, t):
+    a, e, w, M0 = nea["a"], nea["e"], nea["w"], nea["M0"]
+    n = a ** -1.5
+    M = M0 + n * t
+    E = M
+    for _ in range(60):
+        E = E - (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
+    b = np.sqrt(1 - e * e)
+    xo, yo = a * (np.cos(E) - e), a * b * np.sin(E)
+    cw, sw = np.cos(w), np.sin(w)
+    return cw * xo - sw * yo, sw * xo + cw * yo
 
 
 def main():
@@ -63,8 +59,7 @@ def main():
     ap.add_argument("files", nargs="*", type=pathlib.Path, default=DEFAULT)
     ap.add_argument("--out", type=pathlib.Path, default=pathlib.Path("transfer_dispersion.png"))
     args = ap.parse_args()
-    files = [f for f in args.files if f.exists()]
-    data = [load(f) for f in files]
+    data = [load(f) for f in args.files if f.exists()]
     levels = [d["params"]["level"] for d in data]
     n = len(data)
 
@@ -72,40 +67,59 @@ def main():
         "b", plt.get_cmap("Blues_r")(np.linspace(0.0, 0.8, 256)))
     norm = Normalize(0.0, 1.0)
 
-    fig, axes = plt.subplots(3, n, figsize=(4.8 * n, 9.0), squeeze=False)
+    fig, axes = plt.subplots(3, n, figsize=(4.6 * n, 13.0), squeeze=False)
     for r, case in enumerate(CASES):
         for c, d in enumerate(data):
             ax = axes[r][c]
+            td, T, nea = d["params"]["td"], d["params"]["T"], d["nea"]
+            # nominal transfer (rotating)
+            nom = d["nominal"]
+            nt = np.asarray(nom["t"])
+            nx, ny = rot(td + nt, np.asarray(nom["x"]), np.asarray(nom["y"]))
+            ax.plot(nx, ny, color="0.45", lw=1.3, zorder=2)
+            # NEA arc (+-90 d) and Earth orbit, rotating
+            ts = np.linspace(td - 90 * 2 * np.pi / 365.25, td + T + 90 * 2 * np.pi / 365.25, 400)
+            nax, nay = [], []
+            for t in ts:
+                xx, yy = nea_state(nea, t)
+                a, b = rot(t, xx, yy)
+                nax.append(a); nay.append(b)
+            ax.plot(nax, nay, color="0.78", lw=1.1, zorder=1)
+            ax.scatter(0, 0, c="#f2b134", s=130, ec="0.3", zorder=6)        # Sun
+            ax.plot(1, 0, marker="o", ms=7, color="k", zorder=7)            # Earth (departure)
+            # dispersion sets
             cd = next(cc for cc in d["cases"] if cc["name"] == case)
             snaps = cd["snapshots"]
             tf = snaps[-1]["t"]
-            sel = sorted(set(np.linspace(1, len(snaps) - 1, 6).astype(int)))
-            for i in sel:
-                sn = snaps[i]
-                hx = hull_xy(sn)
-                if hx is None:
+            for i, sn in enumerate(snaps):
+                xr, yr = rot(td + sn["t"], np.asarray(sn["x"]), np.asarray(sn["y"]))
+                pts = np.column_stack([xr, yr])
+                if np.ptp(xr) < 1e-12 and np.ptp(yr) < 1e-12:
+                    continue
+                try:
+                    h = ConvexHull(pts); v = np.r_[h.vertices, h.vertices[0]]
+                except Exception:
                     continue
                 last = i == len(snaps) - 1
                 col = cmap(norm(sn["t"] / tf))
-                ax.fill(hx[0], hx[1], facecolor=col, edgecolor="none",
-                        alpha=0.45, zorder=2 + i)
+                ax.fill(pts[v, 0], pts[v, 1], facecolor=col, edgecolor="none",
+                        alpha=0.55, zorder=3 + i)
                 if last:
-                    ax.plot(hx[0], hx[1], color="red", lw=1.8, zorder=40)
-            ax.scatter([0], [0], c="k", s=10, zorder=5)
-            ax.grid(alpha=0.3)  # axes auto-scaled (sets are ~100:1 along-track)
-            ax.axhline(0, color="0.85", lw=0.6, zorder=0)
-            ax.axvline(0, color="0.85", lw=0.6, zorder=0)
+                    ax.plot(pts[v, 0], pts[v, 1], color="red", lw=1.6, zorder=40)
+            cax, cay = rot(td + tf, snaps[-1]["c"][0], snaps[-1]["c"][1])
+            ax.plot(cax, cay, marker="D", ms=7, color="k", zorder=8)        # arrival
+            ax.set_aspect("equal"); ax.grid(alpha=0.3)
             if r == 0:
-                ax.set_title(f"{levels[c]}", fontsize=12)
+                ax.set_title(levels[c], fontsize=12)
             if c == 0:
-                ax.set_ylabel(CASE_LABEL[case] + "\n\nradial [km]", fontsize=9)
+                ax.set_ylabel(CASE_LABEL[case] + "\n\n$y$ [AU]", fontsize=9)
             if r == 2:
-                ax.set_xlabel("transverse (along-track) [km]")
+                ax.set_xlabel("$x$ [AU]")
     sm = ScalarMappable(norm=norm, cmap=cmap)
-    cb = fig.colorbar(sm, ax=axes, fraction=0.025, pad=0.02)
+    cb = fig.colorbar(sm, ax=axes, fraction=0.022, pad=0.02)
     cb.set_label("$t\\,/\\,T$  (final set in red)")
-    fig.suptitle("Low-thrust Earth → NEA transfer: dispersion sets (relative to nominal)",
-                 fontsize=14, y=0.995)
+    fig.suptitle("Low-thrust Earth → NEA: dispersion sets on the transfer (Sun–Earth rotating frame)",
+                 fontsize=13, y=0.995)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=140, bbox_inches="tight")
     print(f"wrote {args.out}")

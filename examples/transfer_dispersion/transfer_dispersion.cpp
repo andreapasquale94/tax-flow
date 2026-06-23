@@ -92,32 +92,46 @@ int main( int argc, char** argv )
         double mag, phi, dur;
         int nsub;
     };
-    const std::array< Arc, 3 > arcs{ Arc{ preset.aLt, preset.phi1, preset.tau1, 5 },
-                                     Arc{ 0.0, preset.phi1, preset.coast, 6 },
-                                     Arc{ preset.aLt, preset.phi2, preset.tau2, 5 } };
+    const std::array< Arc, 3 > arcs{ Arc{ preset.aLt, preset.phi1, preset.tau1, 12 },
+                                     Arc{ 0.0, preset.phi1, preset.coast, 16 },
+                                     Arc{ preset.aLt, preset.phi2, preset.tau2, 12 } };
+    constexpr int kCloudEvery = 6;  // cloud (set) snapshot cadence; centre saved every step
 
     const std::array< DispCase, 3 > cases{ kInit, kThrust, kBoth };
     std::vector< std::vector< Snap > > caseSnaps( 3 );
+    std::vector< std::array< double, 2 > > nominal;  // dense centre trajectory (shared)
+    std::vector< double > nominalT;                   // its times (from departure)
 
     for ( std::size_t ci = 0; ci < 3; ++ci )
     {
         auto x = tax::ads::create< P, M >( dispBox( cases[ci] ), stateIC() );
-        auto sample = [&]( double t ) {
-            Snap sn;
-            sn.t = t;
+        int step = 0;
+        auto record = [&]( double t ) {
             const std::array< double, 6 > zero{};
-            sn.cx = x( 2 ).eval( zero );
-            sn.cy = x( 3 ).eval( zero );
-            sn.x.reserve( xi.size() );
-            sn.y.reserve( xi.size() );
-            for ( const auto& p : xi )
+            const double cx = x( 2 ).eval( zero ), cy = x( 3 ).eval( zero );
+            if ( ci == 0 )  // nominal is case-independent
             {
-                sn.x.push_back( x( 2 ).eval( p ) );
-                sn.y.push_back( x( 3 ).eval( p ) );
+                nominal.push_back( { cx, cy } );
+                nominalT.push_back( t );
             }
-            caseSnaps[ci].push_back( std::move( sn ) );
+            if ( step % kCloudEvery == 0 )
+            {
+                Snap sn;
+                sn.t = t;
+                sn.cx = cx;
+                sn.cy = cy;
+                sn.x.reserve( xi.size() );
+                sn.y.reserve( xi.size() );
+                for ( const auto& p : xi )
+                {
+                    sn.x.push_back( x( 2 ).eval( p ) );
+                    sn.y.push_back( x( 3 ).eval( p ) );
+                }
+                caseSnaps[ci].push_back( std::move( sn ) );
+            }
+            ++step;
         };
-        sample( 0.0 );
+        record( 0.0 );
         double t = 0.0;
         for ( const auto& arc : arcs )
         {
@@ -127,7 +141,7 @@ int main( int argc, char** argv )
                 auto sol = tax::ode::propagate( Verner89{}, rhs( arc.mag, arc.phi ), x, t, t + dt, cfg );
                 x = sol.x.back();
                 t += dt;
-                sample( t );
+                record( t );
             }
         }
     }
@@ -144,6 +158,13 @@ int main( int argc, char** argv )
     out << "  \"nea\": { \"a\": " << kNeaA << ", \"e\": " << kNeaE << ", \"w\": " << kNeaW
         << ", \"M0\": " << kNeaM0 << " },\n";
     out << "  \"timing\": { \"elapsed_ms\": " << elapsed_ms << " },\n";
+    out << "  \"nominal\": { \"t\": [";
+    for ( std::size_t i = 0; i < nominalT.size(); ++i ) out << ( i ? "," : "" ) << nominalT[i];
+    out << "], \"x\": [";
+    for ( std::size_t i = 0; i < nominal.size(); ++i ) out << ( i ? "," : "" ) << nominal[i][0];
+    out << "], \"y\": [";
+    for ( std::size_t i = 0; i < nominal.size(); ++i ) out << ( i ? "," : "" ) << nominal[i][1];
+    out << "] },\n";
     out << "  \"cases\": [\n";
     for ( std::size_t ci = 0; ci < 3; ++ci )
     {
