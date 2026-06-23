@@ -177,16 +177,31 @@ def main():
         g = d["grid"]
         xs, ys = grid_axes(g)
         X, Y = np.meshgrid(xs, ys)
+        # A histogram contour cannot resolve a cloud smaller than ~1 grid cell:
+        # below this the smoothed HDR contour saturates at a fixed "floor" size
+        # (~3 cells) and the early sets look spuriously large. Where the true
+        # 3-sigma radius is sub-resolution we draw it as a circle at the cloud
+        # mean instead, so the set shows its real (tiny) size and growth.
+        cell = max((g["xmax"] - g["xmin"]) / g["nx"], (g["ymax"] - g["ymin"]) / g["ny"])
+        res_floor = 1.5 * cell
         snaps = d["snapshots"]
         t_final = snaps[-1]["t"]
+        theta = np.linspace(0, 2 * np.pi, 80)
         for i, snap in enumerate(snaps):
-            h = hist2d(snap, g)
-            lvl = hdr_levels(h, [SIGMA_FRACS[2]])[0]   # 3-sigma envelope
             last = i == len(snaps) - 1
             col = "red" if last else cmap(norm(snap["t"] / t_final))
+            lw = 1.6 if last else 1.0
+            alpha = 0.95 if last else 0.85
+            zo = 4 if last else 3
+            if snap["r3s"] < res_floor:                # sub-resolution: true circle
+                cx, cy = snap["mean"]
+                ax.plot(cx + snap["r3s"] * np.cos(theta), cy + snap["r3s"] * np.sin(theta),
+                        color=col, lw=lw, alpha=alpha, zorder=zo)
+                continue
+            h = hist2d(snap, g)
+            lvl = hdr_levels(h, [SIGMA_FRACS[2]])[0]   # 3-sigma envelope
             ax.contour(X, Y, h, levels=strictly_increasing([lvl, h.max()]),
-                       colors=[col], linewidths=1.6 if last else 1.0,
-                       alpha=0.95 if last else 0.85, zorder=4 if last else 3)
+                       colors=[col], linewidths=lw, alpha=alpha, zorder=zo)
         draw_refs(ax, d, label=(k == 0))
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)

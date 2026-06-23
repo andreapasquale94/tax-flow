@@ -144,12 +144,18 @@ by \(t/T\) (blue early → red final), strung along the orbit on the ballistic
 
 ![On/off dispersion 3σ growth over one revolution](img/missed_thrust_onoff.png)
 
-The dispersion ellipses trail the spacecraft like beads on a string, widening
-as missed-thrust offsets accumulate. The **mean track also lags further behind
-the nominal** as reliability drops: more OFF arcs deliver less total impulse, so
-the orbit stays closer to the (faster) ballistic circle and the spacecraft
-advances further around it — the unreliable beads reach much higher up the
-right-hand side than the tightly-clustered reliable ones.
+The dispersion **starts at essentially a point** and widens as missed-thrust
+offsets accumulate: for the first ~third of the revolution the 3σ radius is
+below \(10^{-2}\,\mathrm{AU}\) (a single missed 4-day arc barely perturbs the
+orbit), then it grows super-linearly as phase errors compound. The early
+snapshots are sub-resolution for the shared histogram grid, so they are drawn as
+true-radius circles at the cloud mean rather than smoothed contours — otherwise
+the grid/​smoothing floor would make them look spuriously large. The **mean
+track also lags further behind the nominal** as reliability drops: more OFF arcs
+deliver less total impulse, so the orbit stays closer to the (faster) ballistic
+circle and the spacecraft advances further around it — the unreliable beads
+reach much higher up the right-hand side than the tightly-clustered reliable
+ones.
 
 ### Final-epoch dispersion — nested 1/2/3σ bands
 
