@@ -68,4 +68,13 @@ scripts in `examples/plot/` turn those into the figures shown here
     two-state Markov chain: the same DA execution-error surrogate builds the
     1/2/3σ dispersion set across three thruster-reliability scenarios.
 
+-   **[Low-thrust transfer dispersion](transfer_dispersion.md)**
+
+    ---
+
+    Design an Earth → NEA low-thrust transfer from a porkchop plot, then
+    propagate initial-navigation and thrust-execution uncertainty boxes through
+    it: the set-valued delivery dispersion shows thrust error dominating
+    initial knowledge by ~75×.
+
 </div>
