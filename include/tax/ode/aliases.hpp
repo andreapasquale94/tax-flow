@@ -17,15 +17,21 @@
 
 #include <tax/ode/controllers.hpp>
 #include <tax/ode/integrator.hpp>
+#include <tax/ode/steppers/dormand_prince45.hpp>
 #include <tax/ode/steppers/feagin12.hpp>
 #include <tax/ode/steppers/feagin14.hpp>
 #include <tax/ode/steppers/fehlberg78.hpp>
 #include <tax/ode/steppers/taylor.hpp>
+#include <tax/ode/steppers/verner67.hpp>
 #include <tax/ode/steppers/verner78.hpp>
 #include <tax/ode/steppers/verner89.hpp>
 
 namespace tax::ode
 {
+
+template < class State, class Controller = controllers::PI< double >,
+           class F = typename Verner67Stepper< State, Controller >::Rhs >
+using Verner67 = Integrator< Verner67Stepper< State, Controller >, F >;
 
 template < class State, class Controller = controllers::PI< double >,
            class F = typename Verner78Stepper< State, Controller >::Rhs >
@@ -38,6 +44,10 @@ using Verner89 = Integrator< Verner89Stepper< State, Controller >, F >;
 template < class State, class Controller = controllers::PI< double >,
            class F = typename Fehlberg78Stepper< State, Controller >::Rhs >
 using Fehlberg78 = Integrator< Fehlberg78Stepper< State, Controller >, F >;
+
+template < class State, class Controller = controllers::PI< double >,
+           class F = typename DormandPrince45Stepper< State, Controller >::Rhs >
+using DormandPrince45 = Integrator< DormandPrince45Stepper< State, Controller >, F >;
 
 template < class State, class Controller = controllers::PI< double >,
            class F = typename Feagin12Stepper< State, Controller >::Rhs >

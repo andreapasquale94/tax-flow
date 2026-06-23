@@ -39,6 +39,8 @@ tax_add_test(test_ode_events_grid          SOURCES events/test_grid_event.cpp)
 
 # ---- Steppers -----------------------------------------------------------
 tax_add_test(test_ode_taylor_stepper      SOURCES steppers/test_taylor.cpp)
+tax_add_test(test_ode_dormand_prince45_stepper SOURCES steppers/test_dormand_prince45.cpp)
+tax_add_test(test_ode_verner67_stepper    SOURCES steppers/test_verner67.cpp)
 tax_add_test(test_ode_verner78_stepper    SOURCES steppers/test_verner78.cpp)
 tax_add_test(test_ode_verner89_stepper    SOURCES steppers/test_verner89.cpp)
 tax_add_test(test_ode_fehlberg78_stepper  SOURCES steppers/test_fehlberg78.cpp)

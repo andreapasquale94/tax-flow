@@ -1,6 +1,6 @@
 # Methods & Benchmarks
 
-A practical guide to choosing among the six shipped steppers and the four
+A practical guide to choosing among the eight shipped steppers and the four
 controllers.
 
 ---
@@ -9,6 +9,8 @@ controllers.
 
 | Method | Strength | Pay attention to | Default controller |
 |---|---|---|---|
+| **Dormand–Prince 5(4)** | The classical "RK45" (`ode45`); cheap, low-order workhorse for non-stiff problems at modest tolerances | Only 7 stages — loses to the Verner pairs once you push past ~$10^{-7}$ | `PI` |
+| **Verner 7(6)**   | Efficient mid-order pair; fewer stages than Verner 8(7) at moderate tolerances | Order 7 propagation, order-6 embedded estimate | `PI` |
 | **Verner 8(7)**   | Best speed/accuracy balance in the RK family for smooth problems at $10^{-12}$ | Event location via full-order re-step | `PI` |
 | **Verner 9(8)**   | Precision champion at moderate cost | 16 stages — more RHS evals per step | `PI` |
 | **Fehlberg 7(8)** | Classical baseline, well understood | The "Fehlberg coincidence" can zero the embedded estimate on certain steps | `PI` |

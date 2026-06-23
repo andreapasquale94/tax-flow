@@ -162,11 +162,17 @@ This drives accurate event location at full $N$-th order.
 
 ### Runge–Kutta methods
 
-All five embedded-pair RK methods are aliases of the single
+All seven embedded-pair RK methods are aliases of the single
 `detail::EmbeddedRKStepper<Tab, StateT, Controller>` template over their
 Butcher tableaus:
 
 ```cpp
+template <class StateT, class Controller = controllers::PI<double>>
+using DormandPrince45Stepper = /* EmbeddedRKStepper */;  // 5(4), 7 stages
+
+template <class StateT, class Controller = controllers::PI<double>>
+using Verner67Stepper   = /* EmbeddedRKStepper */;  // 7(6), 10 stages
+
 template <class StateT, class Controller = controllers::PI<double>>
 using Verner78Stepper   = /* EmbeddedRKStepper */;  // 8(7), 13 stages
 
@@ -261,6 +267,8 @@ can be reused across the scalar-state RK steppers and the TE-state Taylor steppe
 
 | Alias                                              | Stepper                  | Default controller              |
 | -------------------------------------------------- | ------------------------ | ------------------------------- |
+| `DormandPrince45<State, Ctrl=PI, F=Rhs>`           | `DormandPrince45Stepper` | `controllers::PI<double>`       |
+| `Verner67<State, Ctrl=PI, F=Rhs>`                  | `Verner67Stepper`        | `controllers::PI<double>`       |
 | `Verner78<State, Ctrl=PI, F=Rhs>`                  | `Verner78Stepper`        | `controllers::PI<double>`       |
 | `Verner89<State, Ctrl=PI, F=Rhs>`                  | `Verner89Stepper`        | `controllers::PI<double>`       |
 | `Fehlberg78<State, Ctrl=PI, F=Rhs>`                | `Fehlberg78Stepper`      | `controllers::PI<double>`       |

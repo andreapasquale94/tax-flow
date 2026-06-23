@@ -19,9 +19,11 @@
 #include <tax/ode/solution.hpp>
 #include <tax/ode/step_evaluator.hpp>
 #include <tax/ode/step_result.hpp>
+#include <tax/ode/steppers/dormand_prince45.hpp>
 #include <tax/ode/steppers/feagin12.hpp>
 #include <tax/ode/steppers/feagin14.hpp>
 #include <tax/ode/steppers/fehlberg78.hpp>
 #include <tax/ode/steppers/taylor.hpp>
+#include <tax/ode/steppers/verner67.hpp>
 #include <tax/ode/steppers/verner78.hpp>
 #include <tax/ode/steppers/verner89.hpp>
