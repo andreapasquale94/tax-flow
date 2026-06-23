@@ -60,4 +60,12 @@ scripts in `examples/plot/` turn those into the figures shown here
     under three thruster-reliability scenarios, at the cost of a single
     flow-map propagation per Markov sequence.
 
+-   **[Missed-thrust on/off duty cycle](missed_thrust_onoff.md)**
+
+    ---
+
+    A bang-bang thruster that trips ON/OFF on a 4-day grid, modelled as a
+    two-state Markov chain: the same DA execution-error surrogate builds the
+    1/2/3σ dispersion set across three thruster-reliability scenarios.
+
 </div>
