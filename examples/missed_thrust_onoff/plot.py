@@ -3,8 +3,11 @@
 
 Render the on/off missed-thrust dispersion set written by the
 `missed_thrust_onoff` example. The Monte-Carlo cloud at each 4-day snapshot is
-stored as a 2-D histogram on a shared grid; from it we draw highest-density
-confidence bands (the smallest region containing a given fraction of samples).
+stored as a downsampled point cloud; from a non-parametric kernel-density
+estimate (KDE) of that cloud we draw highest-density confidence bands (the
+smallest region containing a given fraction of the probability mass). The KDE is
+evaluated on a per-snapshot local grid, so the set keeps its true (non-Gaussian)
+shape and is resolved at any size -- there is no shared-grid resolution floor.
 
 Pass one or more scenario JSON files (reliable / intermittent / unreliable);
 each becomes one column in the comparison figures.
@@ -31,7 +34,7 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.patches import Patch
-from scipy.ndimage import gaussian_filter
+from scipy.stats import gaussian_kde
 
 plt.rcParams.update(
     {
@@ -62,20 +65,37 @@ def load(path):
         return json.load(f)
 
 
-def grid_axes(g):
-    """Cell-centre coordinate arrays (x, y) for the stored histogram grid."""
-    nx, ny = g["nx"], g["ny"]
-    xs = g["xmin"] + (np.arange(nx) + 0.5) * (g["xmax"] - g["xmin"]) / nx
-    ys = g["ymin"] + (np.arange(ny) + 0.5) * (g["ymax"] - g["ymin"]) / ny
-    return xs, ys
+def kde_field(snap, ngrid=130, pad=0.6):
+    """KDE density on a per-snapshot local grid sized to the cloud.
 
-
-def hist2d(snap, g, smooth=1.1):
-    """Return the (ny, nx) histogram, lightly smoothed for clean contours."""
-    h = np.asarray(snap["hist"], dtype=float).reshape(g["ny"], g["nx"])
-    if smooth:
-        h = gaussian_filter(h, smooth)
-    return h
+    Returns (X, Y, Z) or None if the cloud is degenerate (no spread). The grid is
+    a RECTANGLE fitted to the cloud's bounding box in each axis (with a small
+    floor so a near-degenerate thin axis still gets padding), so both the long
+    and the short axis of the very elongated along-track sets are resolved with
+    `ngrid` points -- otherwise a square grid would serrate the thin direction.
+    A per-snapshot local grid also means the set is resolved at any scale, with
+    no fixed shared-grid floor.
+    """
+    cx = np.asarray(snap["cloud_x"])
+    cy = np.asarray(snap["cloud_y"])
+    if cx.size < 3:
+        return None
+    rx, ry = np.ptp(cx), np.ptp(cy)
+    major = max(rx, ry)
+    if major <= 0 or not np.isfinite(major):
+        return None
+    mx, my = 0.5 * (cx.min() + cx.max()), 0.5 * (cy.min() + cy.max())
+    hx = 0.5 * max(rx, 0.06 * major) * (1.0 + 2.0 * pad)
+    hy = 0.5 * max(ry, 0.06 * major) * (1.0 + 2.0 * pad)
+    xs = np.linspace(mx - hx, mx + hx, ngrid)
+    ys = np.linspace(my - hy, my + hy, ngrid)
+    X, Y = np.meshgrid(xs, ys)
+    try:
+        kde = gaussian_kde(np.vstack([cx, cy]))
+        Z = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
+    except np.linalg.LinAlgError:
+        return None  # singular covariance (essentially a point)
+    return X, Y, Z
 
 
 def hdr_levels(h, fracs):
@@ -99,14 +119,14 @@ def strictly_increasing(levels):
     return out
 
 
-def band_bbox(h, xs, ys, level, pad=0.45):
-    """Padded square (xlim, ylim) of the region {h >= level}, for auto-zoom."""
-    iy, ix = np.where(h >= level)
-    x0, x1 = xs[ix.min()], xs[ix.max()]
-    y0, y1 = ys[iy.min()], ys[iy.max()]
+def cloud_bbox(snap, pad=0.45):
+    """Padded square (xlim, ylim) around a snapshot's cloud, for auto-zoom."""
+    cx = np.asarray(snap["cloud_x"])
+    cy = np.asarray(snap["cloud_y"])
+    x0, x1, y0, y1 = cx.min(), cx.max(), cy.min(), cy.max()
     s = max(x1 - x0, y1 - y0) * (1.0 + 2 * pad)
-    cx, cy = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
-    return (cx - s / 2, cx + s / 2), (cy - s / 2, cy + s / 2)
+    mx, my = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+    return (mx - s / 2, mx + s / 2), (my - s / 2, my + s / 2)
 
 
 def draw_refs(ax, d, sun=True, label=False):
@@ -174,34 +194,29 @@ def main():
     fig, axes = plt.subplots(1, n, figsize=(6.2 * n + 0.8, 6.6), squeeze=False)
     axes = axes[0]
     for k, (ax, d) in enumerate(zip(axes, datasets)):
-        g = d["grid"]
-        xs, ys = grid_axes(g)
-        X, Y = np.meshgrid(xs, ys)
-        # A histogram contour cannot resolve a cloud smaller than ~1 grid cell:
-        # below this the smoothed HDR contour saturates at a fixed "floor" size
-        # (~3 cells) and the early sets look spuriously large. Where the true
-        # 3-sigma radius is sub-resolution we draw it as a circle at the cloud
-        # mean instead, so the set shows its real (tiny) size and growth.
-        cell = max((g["xmax"] - g["xmin"]) / g["nx"], (g["ymax"] - g["ymin"]) / g["ny"])
-        res_floor = 1.5 * cell
+        # Each snapshot's 3-sigma boundary is the HDR contour of a KDE evaluated
+        # on a local grid sized to that snapshot's cloud. This is non-parametric
+        # (no Gaussian assumption) and resolves the set at any scale, so the
+        # envelope grows continuously from a point with no rendering floor/jump.
         snaps = d["snapshots"]
         t_final = snaps[-1]["t"]
-        theta = np.linspace(0, 2 * np.pi, 80)
+        # Fill the 3-sigma region of each snapshot translucently: the (true,
+        # thin) sets are only a few pixels at full-orbit scale, so 91 outlines
+        # read as a "feather"; overlapping fills instead merge into a smooth
+        # dispersion tube that widens along the orbit. Final boundary in red.
         for i, snap in enumerate(snaps):
             last = i == len(snaps) - 1
-            col = "red" if last else cmap(norm(snap["t"] / t_final))
-            lw = 1.6 if last else 1.0
-            alpha = 0.95 if last else 0.85
-            zo = 4 if last else 3
-            if snap["r3s"] < res_floor:                # sub-resolution: true circle
-                cx, cy = snap["mean"]
-                ax.plot(cx + snap["r3s"] * np.cos(theta), cy + snap["r3s"] * np.sin(theta),
-                        color=col, lw=lw, alpha=alpha, zorder=zo)
+            field = kde_field(snap, ngrid=110)
+            if field is None:
                 continue
-            h = hist2d(snap, g)
-            lvl = hdr_levels(h, [SIGMA_FRACS[2]])[0]   # 3-sigma envelope
-            ax.contour(X, Y, h, levels=strictly_increasing([lvl, h.max()]),
-                       colors=[col], linewidths=lw, alpha=alpha, zorder=zo)
+            X, Y, Z = field
+            lvl = hdr_levels(Z, [SIGMA_FRACS[2]])[0]   # 3-sigma envelope
+            col = cmap(norm(snap["t"] / t_final))
+            ax.contourf(X, Y, Z, levels=strictly_increasing([lvl, Z.max()]),
+                        colors=[col], alpha=0.45, zorder=3 + i)
+            if last:
+                ax.contour(X, Y, Z, levels=strictly_increasing([lvl, Z.max()]),
+                           colors=["red"], linewidths=1.6, zorder=200)
         draw_refs(ax, d, label=(k == 0))
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
@@ -225,13 +240,10 @@ def main():
     figz, axesz = plt.subplots(1, n, figsize=(5.2 * n, 5.6), squeeze=False)
     axesz = axesz[0]
     for k, (ax, d) in enumerate(zip(axesz, datasets)):
-        g = d["grid"]
-        xs, ys = grid_axes(g)
-        X, Y = np.meshgrid(xs, ys)
         snap = d["snapshots"][-1]
-        h = hist2d(snap, g)
-        l1, l2, l3 = hdr_levels(h, SIGMA_FRACS)
-        ax.contourf(X, Y, h, levels=strictly_increasing([l3, l2, l1, h.max()]),
+        X, Y, Z = kde_field(snap, ngrid=160, pad=0.5)  # well-resolved final cloud
+        l1, l2, l3 = hdr_levels(Z, SIGMA_FRACS)
+        ax.contourf(X, Y, Z, levels=strictly_increasing([l3, l2, l1, Z.max()]),
                     colors=BAND_COLS, alpha=0.95, zorder=1)
         first = k == 0
         draw_refs(ax, d, sun=False, label=first)
@@ -243,7 +255,7 @@ def main():
                 label="nominal end" if first else None)
         ax.scatter(snap["mean"][0], snap["mean"][1], marker="x", s=70, color="k",
                    lw=1.8, zorder=7, label="mean" if first else None)
-        bxlim, bylim = band_bbox(h, xs, ys, l3, pad=0.45)
+        bxlim, bylim = cloud_bbox(snap, pad=0.45)
         ax.set_xlim(bxlim)
         ax.set_ylim(bylim)
         ax.set_aspect("equal")

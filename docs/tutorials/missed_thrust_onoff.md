@@ -118,19 +118,25 @@ for (int k = 0; k < kNArcs; ++k) {
     auto sol = tax::ode::propagate(Verner89{},
                    rhs(magBase, theta_nom), x, k*kArc, (k+1)*kArc, cfg);
     x = sol.x.back();          // carry the Taylor map across the arc boundary
-    // evaluate x(2), x(3) at 16 random (δm, δθ) → add to the histogram
+    // evaluate x(2), x(3) at 16 random (δm, δθ) → add to the snapshot cloud
 }
 ```
 
 Carrying the Taylor-valued state across arc boundaries **composes the per-arc
 flow maps** automatically. After each arc the position is a degree-6 polynomial
 in \((\delta_m,\delta_\theta)\); evaluating it at 16 random samples per arc is
-far cheaper than an integration, so 8000 schedules × 16 draws fill a 130 × 130
-histogram at every 4-day snapshot. A direct re-integration of a few schedules
+far cheaper than an integration, so 8000 schedules × 16 draws build a dense
+point cloud at every 4-day snapshot. A direct re-integration of a few schedules
 validates the surrogate (max position error ≈ machine zero).
 
-Confidence bands are the **highest-density regions** at the 2-D
+Confidence bands are the **highest-density regions (HDR)** at the 2-D
 Gaussian-equivalent coverage masses (1σ = 39.35 %, 2σ = 86.47 %, 3σ = 98.89 %).
+They are read from a **non-parametric kernel-density estimate (KDE)** of each
+snapshot's point cloud, evaluated on a per-snapshot local grid. This makes no
+shape assumption (so the true non-Gaussian sets are preserved) and resolves the
+set at any scale — a fixed shared grid, by contrast, cannot resolve the
+sub-\(10^{-2}\,\mathrm{AU}\) early sets and would clamp them to a spurious
+resolution floor.
 
 ---
 
@@ -138,24 +144,26 @@ Gaussian-equivalent coverage masses (1σ = 39.35 %, 2σ = 86.47 %, 3σ = 98.89 %
 
 ### Dispersion growth over the revolution
 
-Each closed curve is the 3σ dispersion boundary at one 4-day snapshot, coloured
-by \(t/T\) (blue early → red final), strung along the orbit on the ballistic
-(grey) and nominal (green dashed) references.
+The 3σ dispersion set at each 4-day snapshot is filled translucently and
+coloured by \(t/T\) (blue early → light late, final boundary in red), so the
+snapshots merge into a single dispersion **tube** widening along the orbit, over
+the ballistic (grey) and nominal (green dashed) references.
 
 ![On/off dispersion 3σ growth over one revolution](img/missed_thrust_onoff.png)
 
 The dispersion **starts at essentially a point** and widens as missed-thrust
 offsets accumulate: for the first ~third of the revolution the 3σ radius is
 below \(10^{-2}\,\mathrm{AU}\) (a single missed 4-day arc barely perturbs the
-orbit), then it grows super-linearly as phase errors compound. The early
-snapshots are sub-resolution for the shared histogram grid, so they are drawn as
-true-radius circles at the cloud mean rather than smoothed contours — otherwise
-the grid/​smoothing floor would make them look spuriously large. The **mean
-track also lags further behind the nominal** as reliability drops: more OFF arcs
-deliver less total impulse, so the orbit stays closer to the (faster) ballistic
-circle and the spacecraft advances further around it — the unreliable beads
-reach much higher up the right-hand side than the tightly-clustered reliable
-ones.
+orbit), then it grows super-linearly as phase errors compound. The sets are
+genuinely thin — strongly elongated **along-track**, since the dominant
+variation between schedules is *how far around the orbit* the spacecraft has
+advanced. The tube widens dramatically with unreliability: the reliable thruster
+(≈ 97 % ON) keeps a narrow corridor hugging the nominal, while the unreliable
+one fans out across a broad swath. The **mean track also lags further behind the
+nominal** as reliability drops: more OFF arcs deliver less total impulse, so the
+orbit stays closer to the (faster) ballistic circle and the spacecraft advances
+further around it — the unreliable tube reaches much higher up the right-hand
+side than the tightly-clustered reliable one.
 
 ### Final-epoch dispersion — nested 1/2/3σ bands
 
@@ -169,6 +177,9 @@ always thrusts. As reliability drops, the band **grows and its mean migrates
 from the nominal endpoint toward the ballistic one**: the unreliable spacecraft
 spends more than half its arcs OFF, so on average it behaves much like the
 no-thrust orbit, with a broad 3σ spread reflecting *which* arcs happened to miss.
+The KDE bands are markedly **non-Gaussian** — an asymmetric teardrop with the
+dense core at the nominal (all-ON) tip and a long tail toward the ballistic
+endpoint — a shape a covariance ellipse could not represent.
 
 ### Duty cycle and dispersion radius vs. time
 

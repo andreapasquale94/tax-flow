@@ -66,7 +66,7 @@ struct Pt
 struct SnapAccum
 {
     std::vector< Pt > pts;
-    double sx = 0.0, sy = 0.0;
+    double sx = 0.0, sy = 0.0;  // sum x, sum y (centroid)
     std::array< long long, ThrusterModel::kNStates > lvl{};
 };
 
@@ -267,11 +267,11 @@ int main( int argc, char** argv )
     ymin -= my;
     ymax += my;
 
-    constexpr int NX = 130, NY = 130;
-    auto binIndex = [&]( double v, double lo, double hi, int n ) {
-        int idx = static_cast< int >( ( v - lo ) / ( hi - lo ) * n );
-        return idx < 0 ? 0 : ( idx >= n ? n - 1 : idx );
-    };
+    // Per-snapshot we export a downsampled point cloud (not a fixed global-grid
+    // histogram): plot.py runs a non-parametric KDE on it with a per-snapshot
+    // local grid, so the dispersion set keeps its true (non-Gaussian) shape and
+    // its size is resolved at any scale -- no grid floor, no rendering jump.
+    constexpr std::size_t kCloudOut = 2000;  // points exported per snapshot
 
     // ---- Write JSON ---------------------------------------------------------
     std::ofstream out( scenario.outfile );
@@ -302,7 +302,7 @@ int main( int argc, char** argv )
     out << "  \"validation\": { \"max_pos_err\": " << max_err << ", \"n_check\": " << kNCheck
         << " },\n";
     out << "  \"grid\": { \"xmin\": " << xmin << ", \"xmax\": " << xmax << ", \"ymin\": " << ymin
-        << ", \"ymax\": " << ymax << ", \"nx\": " << NX << ", \"ny\": " << NY << " },\n";
+        << ", \"ymax\": " << ymax << " },\n";
 
     auto writeCurve = [&]( const char* key,
                            const std::pair< std::vector< double >, std::vector< double > >& c,
@@ -320,13 +320,6 @@ int main( int argc, char** argv )
     for ( int k = 0; k < kNArcs; ++k )
     {
         const auto& snap = snaps[static_cast< std::size_t >( k )];
-        std::vector< int > hist( static_cast< std::size_t >( NX * NY ), 0 );
-        for ( const auto& p : snap.pts )
-        {
-            const int ix = binIndex( p.x, xmin, xmax, NX );
-            const int iy = binIndex( p.y, ymin, ymax, NY );
-            ++hist[static_cast< std::size_t >( iy * NX + ix )];
-        }
         const double n = static_cast< double >( snap.pts.size() );
         const double cx = n > 0 ? snap.sx / n : 0.0;
         const double cy = n > 0 ? snap.sy / n : 0.0;
@@ -358,8 +351,22 @@ int main( int argc, char** argv )
                 << ( nseq > 0 ? static_cast< double >( snap.lvl[static_cast< std::size_t >( s )] ) /
                                     static_cast< double >( nseq )
                               : 0.0 );
-        out << "], \"hist\": [";
-        for ( std::size_t i = 0; i < hist.size(); ++i ) out << ( i ? "," : "" ) << hist[i];
+        // Downsampled cloud (strided) for the KDE in plot.py.
+        const std::size_t stride = std::max< std::size_t >( 1, snap.pts.size() / kCloudOut );
+        out << "], \"cloud_x\": [";
+        bool first_pt = true;
+        for ( std::size_t i = 0; i < snap.pts.size(); i += stride )
+        {
+            out << ( first_pt ? "" : "," ) << snap.pts[i].x;
+            first_pt = false;
+        }
+        out << "], \"cloud_y\": [";
+        first_pt = true;
+        for ( std::size_t i = 0; i < snap.pts.size(); i += stride )
+        {
+            out << ( first_pt ? "" : "," ) << snap.pts[i].y;
+            first_pt = false;
+        }
         out << "] }" << ( k + 1 < kNArcs ? "," : "" ) << "\n";
     }
     out << "  ]\n}\n";
