@@ -9,6 +9,11 @@
 //                 (https://www.sfu.ca/~jverner/).
 //   Verner89Tab — 16-stage, propagates at order 9 with order-8 embedded.
 //                 (Added in a follow-up task.)
+//   Verner67Tab — 10-stage, propagates at order 7 with order-6 embedded
+//                 ("most efficient" 7(6) pair; SciML/OrdinaryDiffEq.jl
+//                 `Vern7`). FSAL in the source (stage 9 at c=1); the shared
+//                 stepper re-evaluates every stage, so the flag is left
+//                 false and all stages are stored explicitly.
 //
 // Layout matches the tax::ode::detail::adaptive_rk_step contract:
 //   c     : nodes  (size n_stages)
@@ -368,6 +373,108 @@ struct Verner89Tab
         0.0,
         0.04834231373823958,
     };
+};
+
+struct Verner67Tab
+{
+    static constexpr int n_stages = 10;
+    static constexpr int order = 7;
+    static constexpr int order_emb = 6;
+    static constexpr bool fsal = false;
+
+    // c[0] = 0.0 (first stage at t), then c2..c8 from the SciML Float64
+    // source; c9 and c10 are both 1.0 (recovered as the stage-9/10 a-row
+    // sums — Verner's FSAL stage plus the extra error-estimate stage).
+    static constexpr std::array< double, 10 > c{ 0.0,
+                                                 0.005,
+                                                 0.10888888888888888,
+                                                 0.16333333333333333,
+                                                 0.4555,
+                                                 0.6095094489978381,
+                                                 0.884,
+                                                 0.925,
+                                                 1.0,
+                                                 1.0 };
+
+    // 45 values, row-major lower-triangular (without diagonal):
+    //   index 0          = a21             (stage 2, depends on stage 1 only)
+    //   indices 1..2     = a31, a32        (stage 3)
+    //   ...
+    //   indices 36..44   = a10_1 .. a10_9  (stage 10)
+    // Zero entries are explicit (the SciML source omits column 2 for
+    // stages 4..10 and columns 8,9 for stage 10).
+    static constexpr std::array< double, 45 > a{
+        0.005,  // stage 2
+        -1.07679012345679,
+        1.185679012345679,  // stage 3
+        0.04083333333333333,
+        0.0,
+        0.1225,  // stage 4
+        0.6389139236255726,
+        0.0,
+        -2.455672638223657,
+        2.272258714598084,  // stage 5
+        -2.6615773750187572,
+        0.0,
+        10.804513886456137,
+        -8.3539146573962,
+        0.820487594956657,  // stage 6
+        6.067741434696772,
+        0.0,
+        -24.711273635911088,
+        20.427517930788895,
+        -1.9061579788166472,
+        1.006172249242068,  // stage 7
+        12.054670076253203,
+        0.0,
+        -49.75478495046899,
+        41.142888638604674,
+        -4.461760149974004,
+        2.042334822239175,
+        -0.09834843665406107,  // stage 8
+        10.138146522881808,
+        0.0,
+        -42.6411360317175,
+        35.76384003992257,
+        -4.3480228403929075,
+        2.0098622683770357,
+        0.3487490460338272,
+        -0.27143900510483127,  // stage 9
+        -45.030072034298676,
+        0.0,
+        187.3272437654589,
+        -154.02882369350186,
+        18.56465306347536,
+        -7.141809679295079,
+        1.3088085781613787,
+        0.0,
+        0.0  // stage 10
+    };
+
+    // Order-7 propagation weights (stages 2, 3 and 10 do not contribute).
+    static constexpr std::array< double, 10 > b{ 0.04715561848627222,
+                                                 0.0,
+                                                 0.0,
+                                                 0.25750564298434153,
+                                                 0.26216653977412624,
+                                                 0.15216092656738558,
+                                                 0.4939969170032485,
+                                                 -0.29430311714032503,
+                                                 0.08131747232495111,
+                                                 0.0 };
+
+    // Embedded order-6 weights (bhat from the SciML source; bhat_i =
+    // b_i - btilde_i, so stages 8 and 9 cancel out and stage 10 enters).
+    static constexpr std::array< double, 10 > b_emb{ 0.044608606606341174,
+                                                     0.0,
+                                                     0.0,
+                                                     0.26716403785713727,
+                                                     0.22010183001772932,
+                                                     0.2188431703143157,
+                                                     0.22898717054112028,
+                                                     0.0,
+                                                     0.0,
+                                                     0.02029518466335628 };
 };
 
 }  // namespace tax::ode::detail

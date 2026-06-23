@@ -16,10 +16,12 @@
 #include <memory>
 #include <tax/ode/event.hpp>
 #include <tax/ode/integrator.hpp>
+#include <tax/ode/steppers/dormand_prince45.hpp>
 #include <tax/ode/steppers/feagin12.hpp>
 #include <tax/ode/steppers/feagin14.hpp>
 #include <tax/ode/steppers/fehlberg78.hpp>
 #include <tax/ode/steppers/taylor.hpp>
+#include <tax/ode/steppers/verner67.hpp>
 #include <tax/ode/steppers/verner78.hpp>
 #include <tax/ode/steppers/verner89.hpp>
 #include <type_traits>
@@ -37,6 +39,10 @@ struct Taylor
 {
 };
 
+struct Verner67
+{
+};
+
 struct Verner78
 {
 };
@@ -46,6 +52,10 @@ struct Verner89
 };
 
 struct Fehlberg78
+{
+};
+
+struct DormandPrince45
 {
 };
 
@@ -74,6 +84,12 @@ struct StepperFor< methods::Taylor< N >, State >
 };
 
 template < class State >
+struct StepperFor< methods::Verner67, State >
+{
+    using type = Verner67Stepper< State >;
+};
+
+template < class State >
 struct StepperFor< methods::Verner78, State >
 {
     using type = Verner78Stepper< State >;
@@ -89,6 +105,12 @@ template < class State >
 struct StepperFor< methods::Fehlberg78, State >
 {
     using type = Fehlberg78Stepper< State >;
+};
+
+template < class State >
+struct StepperFor< methods::DormandPrince45, State >
+{
+    using type = DormandPrince45Stepper< State >;
 };
 
 template < class State >
@@ -111,9 +133,9 @@ using StepperT = typename StepperFor< Method, State >::type;
 // Propagate an ODE. Returns a Solution holding accepted step boundaries
 // (save_steps=true by default) plus any recorded events.
 template < class Method, class F, class State, class T >
-[[nodiscard]] auto propagate(
-    Method, F&& rhs, const State& x0, const T& t0, const T& t1, IntegratorConfig< T > cfg = {},
-    std::vector< std::shared_ptr< Event< State, T > > > events = {} )
+[[nodiscard]] auto propagate( Method, F&& rhs, const State& x0, const T& t0, const T& t1,
+                              IntegratorConfig< T > cfg = {},
+                              std::vector< std::shared_ptr< Event< State, T > > > events = {} )
 {
     using Stepper = detail::StepperT< Method, State >;
     Integrator< Stepper, std::decay_t< F > > integ{ std::forward< F >( rhs ), std::move( cfg ),

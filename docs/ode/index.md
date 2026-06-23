@@ -52,6 +52,8 @@ methods. The user-side code is otherwise identical.
 | Stepper | Order | Embedded order | Stages | Event location | Default controller |
 |---|:-:|:-:|:-:|---|---|
 | `TaylorStepper<N>`      | $N$ | $N-1$ | $N$ RHS evals | intrinsic per-step expansion (full $N$-th order) | `JorbaZou` |
+| `DormandPrince45Stepper`| 5  | 4  | 7  | controller-free full-order re-step | `PI` |
+| `Verner67Stepper`       | 7  | 6  | 10 | controller-free full-order re-step | `PI` |
 | `Verner78Stepper`       | 8  | 7  | 13 | controller-free full-order re-step | `PI` |
 | `Verner89Stepper`       | 9  | 8  | 16 | controller-free full-order re-step | `PI` |
 | `Fehlberg78Stepper`     | 7  | 8  | 13 | controller-free full-order re-step | `PI` |
@@ -78,6 +80,8 @@ via the `Controller` template parameter — see
 | `tax/ode/solution.hpp`          | `Solution<Stepper, State>` |
 | `tax/ode/controllers.hpp`       | `I`, `PI`, `H211b`, `JorbaZou` |
 | `tax/ode/steppers/taylor.hpp`   | `TaylorStepper<N, State, Controller>` |
+| `tax/ode/steppers/dormand_prince45.hpp` | `DormandPrince45Stepper<State, Controller>` |
+| `tax/ode/steppers/verner67.hpp` | `Verner67Stepper<State, Controller>` |
 | `tax/ode/steppers/verner78.hpp` | `Verner78Stepper<State, Controller>` |
 | `tax/ode/steppers/verner89.hpp` | `Verner89Stepper<State, Controller>` |
 | `tax/ode/steppers/fehlberg78.hpp` | `Fehlberg78Stepper<State, Controller>` |
