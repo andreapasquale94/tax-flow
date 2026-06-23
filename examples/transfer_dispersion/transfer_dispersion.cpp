@@ -15,6 +15,7 @@
 //                 transfer_dispersion_high.json --out transfer_dispersion.png
 // =============================================================================
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
@@ -44,10 +45,17 @@ struct Snap
     std::vector< double > x, y;
 };
 
-// Box sample directions in [-1, 1]^6: all 2^6 vertices + random interior points.
-std::vector< std::array< double, 6 > > makeSamples()
+// Box sample directions in [-1, 1]^6. The FIRST `nloop` are the perimeter of the
+// (delta_m, delta_th) face (other axes 0) -- its image traces the thrust-driven
+// dispersion-set boundary exactly; the rest (vertices + random interior) feed a
+// convex hull for the initial-dispersion case.
+std::vector< std::array< double, 6 > > makeSamples( int& nloop )
 {
     std::vector< std::array< double, 6 > > xi;
+    const auto loop = unitSquareBoundary( 40 );  // (delta_m, delta_th) perimeter
+    for ( const auto& ab : loop ) xi.push_back( { ab[0], ab[1], 0, 0, 0, 0 } );
+    nloop = static_cast< int >( loop.size() );
+
     for ( int v = 0; v < 64; ++v )
     {
         std::array< double, 6 > p{};
@@ -83,7 +91,8 @@ int main( int argc, char** argv )
     cfg.abstol = cfg.reltol = 1e-11;
     cfg.save_steps = false;
 
-    const auto xi = makeSamples();
+    int nloop = 0;
+    const auto xi = makeSamples( nloop );
     Stopwatch clock;
 
     // Arc schedule: (magnitude, direction, duration, #sub-snapshots).
@@ -92,44 +101,58 @@ int main( int argc, char** argv )
         double mag, phi, dur;
         int nsub;
     };
-    const std::array< Arc, 3 > arcs{ Arc{ preset.aLt, preset.phi1, preset.tau1, 12 },
-                                     Arc{ 0.0, preset.phi1, preset.coast, 16 },
-                                     Arc{ preset.aLt, preset.phi2, preset.tau2, 12 } };
-    constexpr int kCloudEvery = 6;  // cloud (set) snapshot cadence; centre saved every step
+    const std::array< Arc, 3 > arcs{ Arc{ preset.aLt, preset.phi1, preset.tau1, 18 },
+                                     Arc{ 0.0, preset.phi1, preset.coast, 24 },
+                                     Arc{ preset.aLt, preset.phi2, preset.tau2, 18 } };
+    constexpr int kCloudEvery = 3;  // dispersion-set snapshot cadence (in sub-steps)
 
     const std::array< DispCase, 3 > cases{ kInit, kThrust, kBoth };
     std::vector< std::vector< Snap > > caseSnaps( 3 );
-    std::vector< std::array< double, 2 > > nominal;  // dense centre trajectory (shared)
-    std::vector< double > nominalT;                   // its times (from departure)
+    std::array< double, 3 > maxErr{};  // DA-vs-direct position error per case (AU)
 
+    // ---- Dense nominal trajectory (scalar, fine steps -> smooth in any frame)
+    std::vector< std::array< double, 2 > > nominal;
+    std::vector< double > nominalT;
+    {
+        auto s = stateIC();
+        double t = 0.0;
+        nominalT.push_back( 0.0 );
+        nominal.push_back( { s( 2 ), s( 3 ) } );
+        for ( const auto& arc : arcs )
+        {
+            const int nf = std::max( 2, static_cast< int >( std::ceil( arc.dur / 0.04 ) ) );
+            const double dt = arc.dur / nf;
+            for ( int k = 0; k < nf; ++k )
+            {
+                auto sol = tax::ode::propagate( Verner89{}, rhs( arc.mag, arc.phi ), s, t, t + dt, cfg );
+                s = sol.x.back();
+                t += dt;
+                nominalT.push_back( t );
+                nominal.push_back( { s( 2 ), s( 3 ) } );
+            }
+        }
+    }
+
+    // ---- DA box per case: carry the flow map, sample the dispersion set -------
     for ( std::size_t ci = 0; ci < 3; ++ci )
     {
         auto x = tax::ads::create< P, M >( dispBox( cases[ci] ), stateIC() );
         int step = 0;
         auto record = [&]( double t ) {
+            if ( step++ % kCloudEvery != 0 ) return;
             const std::array< double, 6 > zero{};
-            const double cx = x( 2 ).eval( zero ), cy = x( 3 ).eval( zero );
-            if ( ci == 0 )  // nominal is case-independent
+            Snap sn;
+            sn.t = t;
+            sn.cx = x( 2 ).eval( zero );
+            sn.cy = x( 3 ).eval( zero );
+            sn.x.reserve( xi.size() );
+            sn.y.reserve( xi.size() );
+            for ( const auto& p : xi )
             {
-                nominal.push_back( { cx, cy } );
-                nominalT.push_back( t );
+                sn.x.push_back( x( 2 ).eval( p ) );
+                sn.y.push_back( x( 3 ).eval( p ) );
             }
-            if ( step % kCloudEvery == 0 )
-            {
-                Snap sn;
-                sn.t = t;
-                sn.cx = cx;
-                sn.cy = cy;
-                sn.x.reserve( xi.size() );
-                sn.y.reserve( xi.size() );
-                for ( const auto& p : xi )
-                {
-                    sn.x.push_back( x( 2 ).eval( p ) );
-                    sn.y.push_back( x( 3 ).eval( p ) );
-                }
-                caseSnaps[ci].push_back( std::move( sn ) );
-            }
-            ++step;
+            caseSnaps[ci].push_back( std::move( sn ) );
         };
         record( 0.0 );
         double t = 0.0;
@@ -144,6 +167,36 @@ int main( int argc, char** argv )
                 record( t );
             }
         }
+
+        // ---- Validation: DA flow map vs direct integration (saturation check) -
+        Rng vr( 0x51A5ULL + ci );
+        for ( int v = 0; v < 16; ++v )
+        {
+            std::array< double, 6 > p;
+            for ( int a = 0; a < 6; ++a ) p[static_cast< std::size_t >( a )] = vr.symmetric();
+            auto ic = stateIC();
+            ic( 0 ) = p[0] * cases[ci].hdm;
+            ic( 1 ) = p[1] * cases[ci].hdth;
+            ic( 2 ) += p[2] * cases[ci].hpos;
+            ic( 3 ) += p[3] * cases[ci].hpos;
+            ic( 4 ) += p[4] * cases[ci].hvel;
+            ic( 5 ) += p[5] * cases[ci].hvel;
+            auto s = ic;
+            double tt = 0.0;
+            for ( const auto& arc : arcs )
+            {
+                const double dt = arc.dur / arc.nsub;
+                for ( int k = 0; k < arc.nsub; ++k )
+                {
+                    auto sol = tax::ode::propagate( Verner89{}, rhs( arc.mag, arc.phi ), s, tt,
+                                                    tt + dt, cfg );
+                    s = sol.x.back();
+                    tt += dt;
+                }
+            }
+            maxErr[ci] = std::max( maxErr[ci],
+                                   std::hypot( x( 2 ).eval( p ) - s( 2 ), x( 3 ).eval( p ) - s( 3 ) ) );
+        }
     }
     const double elapsed_ms = clock.ms();
 
@@ -151,6 +204,7 @@ int main( int argc, char** argv )
     std::ofstream out( preset.outfile );
     out << std::setprecision( 10 );
     out << "{\n  \"method\": \"transfer_dispersion\",\n";
+    out << "  \"nloop\": " << nloop << ",\n";
     out << "  \"params\": { \"level\": \"" << preset.name << "\", \"a_lt\": " << preset.aLt
         << ", \"T\": " << preset.T << ", \"td\": " << kTd << ", \"P\": " << P
         << ", \"pos_km\": 1000, \"vel_ms\": 1, \"sig_m\": " << kSigM
@@ -193,6 +247,10 @@ int main( int argc, char** argv )
                    { "P, M, D", std::to_string( P ) + ", " + std::to_string( M ) + ", " +
                                     std::to_string( D ) },
                    { "snapshots/case", std::to_string( caseSnaps[0].size() ) },
+                   { "DA err (km): init/thrust/both",
+                     std::to_string( maxErr[0] * kAUkm ) + " / " +
+                         std::to_string( maxErr[1] * kAUkm ) + " / " +
+                         std::to_string( maxErr[2] * kAUkm ) },
                    { "elapsed", std::to_string( elapsed_ms ) + " ms" },
                    { "output", preset.outfile } } );
     return 0;
