@@ -58,17 +58,23 @@ class AdsSolution
         [[nodiscard]] auto end() const noexcept { return leaves_.end(); }
         [[nodiscard]] const LeafView& operator[]( std::size_t i ) const { return leaves_[i]; }
 
+       private:
+        friend AdsSolution;
+
         void reserve( std::size_t n ) { leaves_.reserve( n ); }
         void add( const BoxT& box, const State& x, int depth, int id )
         {
             leaves_.push_back( LeafView{ box, x, depth, id } );
         }
 
-       private:
         T t_;
         std::vector< LeafView > leaves_;
     };
 
+    // `leafSol` MUST be indexed parallel to the tree arena: leafSol[idx] is the
+    // ode::Solution for tree.leaf(idx), one entry per arena leaf (retired,
+    // active, and done alike). The AdsDriver upholds this. snapshots()/final()
+    // index leafSol_ by arena index, so a size mismatch is a caller error.
     AdsSolution( Tree tree, std::vector< LeafSol > leafSol, T t0, T t1 )
         : tree_( std::move( tree ) ), leafSol_( std::move( leafSol ) ), t0_( t0 ), t1_( t1 )
     {
@@ -99,6 +105,9 @@ class AdsSolution
     {
         // Gather all reserved-label event records across every arena leaf.
         std::vector< Rec > recs;
+        // Iterate ALL arena leaves, including retired parents: a retired parent
+        // holds the grid records for times before its split, where its box is the
+        // active partition member. Excluding them would leave gaps before splits.
         for ( std::size_t idx = 0; idx < leafSol_.size(); ++idx )
         {
             const auto& ls = leafSol_[idx];

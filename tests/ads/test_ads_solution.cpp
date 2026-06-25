@@ -110,6 +110,10 @@ TEST( AdsSolution, SnapshotsBracketAndBucket )
     EXPECT_DOUBLE_EQ( snaps[1][0].box.halfWidth( 0 ), 0.5 );
     EXPECT_EQ( snaps[1][0].id, 0 );
     EXPECT_EQ( snaps[1][1].id, 1 );
+
+    EXPECT_EQ( snaps[0][0].depth, 0 );
+    EXPECT_EQ( snaps[1][0].depth, 1 );
+    EXPECT_EQ( snaps[1][1].depth, 1 );
 }
 
 TEST( AdsSolution, FinalMatchesLastSnapshot )
@@ -119,7 +123,13 @@ TEST( AdsSolution, FinalMatchesLastSnapshot )
     auto fin = sol.final();
     EXPECT_DOUBLE_EQ( fin.time(), 1.0 );
     EXPECT_EQ( fin.size(), 2u );
-    EXPECT_EQ( sol.snapshots().back().size(), fin.size() );
+    auto snaps = sol.snapshots();
+    ASSERT_EQ( snaps.back().size(), fin.size() );
+    for ( std::size_t i = 0; i < fin.size(); ++i )
+    {
+        EXPECT_DOUBLE_EQ( snaps.back()[i].box.center( 0 ), fin[i].box.center( 0 ) );
+        EXPECT_EQ( snaps.back()[i].id, fin[i].id );
+    }
 }
 
 TEST( AdsSolution, ClustersNearbyTimes )
@@ -148,4 +158,22 @@ TEST( AdsSolution, NoGridGivesEndpointsOnly )
     EXPECT_EQ( snaps[0].size(), 1u );
     EXPECT_DOUBLE_EQ( snaps[1].time(), 1.0 );
     EXPECT_EQ( snaps[1].size(), 2u );
+}
+
+TEST( AdsSolution, RetiredParentGridRecordIncluded )
+{
+    // A grid record on the (later retired) root at t=0.2 — before the split at
+    // 0.4 — must appear as the sole partition member (the parent box) at t=0.2,
+    // proving retired leaves' pre-split records are not dropped.
+    auto b = buildSplitOnce( /*childGridTimes=*/{ 0.5 } );
+    auto& root = b.leafSol[static_cast< std::size_t >( b.root )];
+    root.events.push_back( { std::string{ kSnapshotLabel }, 0.2, root.x.front() } );
+    Sol sol{ std::move( b.tree ), std::move( b.leafSol ), 0.0, 1.0 };
+
+    auto snaps = sol.snapshots();
+    ASSERT_EQ( snaps.size(), 4u );  // t0(0.0), parent(0.2), children(0.5), t1(1.0)
+    EXPECT_DOUBLE_EQ( snaps[1].time(), 0.2 );
+    ASSERT_EQ( snaps[1].size(), 1u );
+    EXPECT_DOUBLE_EQ( snaps[1][0].box.center( 0 ), 0.0 );  // parent box, not a child
+    EXPECT_DOUBLE_EQ( snaps[1][0].box.halfWidth( 0 ), 1.0 );
 }
