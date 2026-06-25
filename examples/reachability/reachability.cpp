@@ -4,10 +4,10 @@
 // Low-thrust reachable set of a circular heliocentric orbit, thrusting at
 // constant (magnitude, direction-from-velocity) over one revolution.
 //
-// One ADS propagation per snapshot time (every 10 days) over the 2-D
-// control box (m, theta); each snapshot draws ONE envelope (outer boundary
-// of the reachable set); the underlying ADS leaf count is reported in the
-// banner. The envelope outline is drawn by plot.py.
+// A single ADS propagation over the 2-D control box (m, theta); snapshots()
+// records the partition every 10 days and each snapshot draws ONE envelope
+// (outer boundary of the reachable set); the underlying ADS leaf count is
+// reported in the banner. The envelope outline is drawn by plot.py.
 //
 // Run:    ./reachability [spacecraft|cubesat]
 // Writes: reachability.json            (spacecraft preset, default)
@@ -34,8 +34,8 @@ namespace
 // boundary (position components x = 2, y = 3). Tracing only this edge avoids
 // the radial spoke that a full control-box-perimeter trace would draw (the
 // m = 0 edge collapses to a point and the theta seam doubles back).
-template < class Tree >
-example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double, 2 >& full_box,
+template < class Partition >
+example::Polygon envelopePolygon( const Partition& part, const tax::ads::Box< double, 2 >& full_box,
                                   int n_theta )
 {
     example::Polygon p;
@@ -47,9 +47,8 @@ example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double,
         const double xitheta =
             -1.0 + 2.0 * static_cast< double >( i ) / static_cast< double >( n_theta );
         const double th = full_box.center( 1 ) + full_box.halfWidth( 1 ) * xitheta;
-        for ( int li : tree.done() )
+        for ( const auto& leaf : part )
         {
-            const auto& leaf = tree.leaf( li );
             const double dm = m - leaf.box.center( 0 );
             const double dt = th - leaf.box.center( 1 );
             if ( std::abs( dm ) <= leaf.box.halfWidth( 0 ) + 1e-9 &&
@@ -57,8 +56,8 @@ example::Polygon envelopePolygon( const Tree& tree, const tax::ads::Box< double,
             {
                 const std::array< double, 2 > loc{ dm / leaf.box.halfWidth( 0 ),
                                                    dt / leaf.box.halfWidth( 1 ) };
-                p.x.push_back( leaf.payload( 2 ).eval( loc ) );
-                p.y.push_back( leaf.payload( 3 ).eval( loc ) );
+                p.x.push_back( leaf.flowMap( 2 ).eval( loc ) );
+                p.y.push_back( leaf.flowMap( 3 ).eval( loc ) );
                 break;
             }
         }
@@ -109,24 +108,22 @@ int main( int argc, char** argv )
     auto ref_sol = tax::ode::propagate( Verner89{}, rhs(), ballisticCenter(), 0.0, t_final, cfg );
     const auto reference = sampleOrbit( ref_sol, {}, D );
 
-    // ---- One ADS propagation per snapshot time -------------------------------
+    // ---- Single ADS propagation with a snapshot grid -------------------------
     const auto full_box = controlBox( a_max );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
     Stopwatch clock;
-    for ( double t : snap_times )
+    // One propagation to the last snapshot time; snapshots() records the partition
+    // at each grid time. Skip the t0 bracket: the reachable set is rendered from the
+    // first snapshot onward, as the original per-snapshot version did.
+    auto sol = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box, icCenter( a_max ),
+                                         0.0, snap_times.back(), snap_times, cfg, adsThreads() );
+    for ( const auto& part : sol.snapshots() )
     {
-        auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box,
-                                              icCenter( a_max ), 0.0, t, cfg, adsThreads() ).tree();
-        int n_leaves = 0;
-        for ( int li : tree.done() )
-        {
-            (void)li;
-            ++n_leaves;
-        }
-        Snapshot snap{ t, {} };
-        snap.leaves.push_back( envelopePolygon( tree, full_box, kNTheta ) );
-        leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( n_leaves );
+        if ( part.time() <= 0.0 ) continue;
+        Snapshot snap{ part.time(), {} };
+        snap.leaves.push_back( envelopePolygon( part, full_box, kNTheta ) );
+        leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( part.size() );
         snapshots.push_back( std::move( snap ) );
     }
     const double elapsed_ms = clock.ms();
