@@ -43,7 +43,7 @@ int main()
     auto ref_sol = tax::ode::propagate( Verner89{}, rhs(), icCenter(), 0.0, t_final, cfg );
     const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
 
-    // ---- One LOADS propagation per snapshot time ------------------------------
+    // ---- Single LOADS propagation with a snapshot grid -----------------------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;

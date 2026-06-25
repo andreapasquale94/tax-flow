@@ -8,7 +8,7 @@
 // polynomial's top-degree mass exceeds a tolerance; each leaf of the
 // resulting tree carries its own flow polynomial on a sub-domain.
 //
-// For the box-evolution figure we run ADS independently to each of 9
+// A single ADS propagation records the partition at each of the 9
 // snapshot times. The first snapshot is the IC box itself; later
 // snapshots show progressively finer partitions as nonlinearity grows.
 //
@@ -50,7 +50,7 @@ int main()
     auto ref_sol = tax::ode::propagate( Taylor< 16 >{}, rhs(), icCenter(), 0.0, t_final, cfg );
     const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
 
-    // ---- One ADS propagation per snapshot time -------------------------------
+    // ---- Single ADS propagation with a snapshot grid -------------------------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;

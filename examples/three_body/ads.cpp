@@ -4,11 +4,10 @@
 // Step 2 — Automatic Domain Splitting on the L1 neighbourhood IC box
 // (Earth-Moon planar CR3BP).
 //
-// For each snapshot time we run a fresh ADS propagation from t = 0 with
-// the truncation criterion and dump every done leaf's (x, y) boundary
-// image. The collection grows from a single leaf at small times to many
-// as the unstable manifold stretches the IC box into a long thin streak
-// that one polynomial can no longer represent.
+// A single ADS propagation records the partition at each snapshot time.
+// The collection grows from a single leaf at small times to many as the
+// unstable manifold stretches the IC box into a long thin streak that one
+// polynomial can no longer represent.
 //
 // Run:    ./three_body_ads
 // Writes: cr3bp_ads.json   (plot with examples/plot/plot_three_body.py)
@@ -47,7 +46,7 @@ int main()
     auto ref_sol = tax::ode::propagate( Verner89{}, rhs(), icCenter(), 0.0, t_final, cfg );
     const auto reference = sampleOrbit( ref_sol, example::linspace( 0.0, t_final, 200 ), D );
 
-    // ---- One ADS propagation per snapshot time -------------------------------
+    // ---- Single ADS propagation with a snapshot grid -------------------------
     const auto boundary = unitSquareBoundary( kNPerEdge );
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;

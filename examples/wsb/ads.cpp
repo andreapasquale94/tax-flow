@@ -1,9 +1,9 @@
 // =============================================================================
 // examples/wsb/ads.cpp
 //
-// Per-snapshot ADS run on the WSB IC box. For each of the 5-day snapshot
-// times we run a fresh ADS propagation from t = 0 to t_snap and dump
-// every done leaf's (x, y) boundary image. Truncation criterion.
+// One ADS propagation over the WSB IC box; snapshots() records the
+// partition (boundary image of every leaf) at each 5-day snapshot time.
+// Truncation criterion.
 //
 // Run:    ./wsb_ads
 // Writes: wsb_ads.json
@@ -116,7 +116,7 @@ int main()
 
     const auto t_a = std::chrono::high_resolution_clock::now();
     auto sol = tax::ads::propagate< P >( Feagin12{}, criterion, rhs(), ic_box, icCenter(), 0.0,
-                                         tFinal_days / kTimeU_days, times_canon, cfg, kThreads );
+                                         times_canon.back(), times_canon, cfg, kThreads );
     const auto t_b = std::chrono::high_resolution_clock::now();
     const double total_ms = std::chrono::duration< double, std::milli >( t_b - t_a ).count();
 

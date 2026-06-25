@@ -274,10 +274,10 @@ int main()
 
     // ---- ADS envelope polygons per snapshot --------------------------------
     //
-    // For each snapshot time t_snap we run an independent ADS propagation
-    // (truncation criterion, P=6, tol=1e-4) and dump the (x, y) boundary
-    // image of every done leaf. The collection of polygons is what the
-    // envelope figure renders against the MC samples.
+    // A single ADS propagation (truncation, P=6, tol=1e-4); snapshots()
+    // gives the boundary image of every done leaf at each snapshot time.
+    // The collection of polygons is what the envelope figure renders
+    // against the MC samples.
     constexpr int kEnvP = 6;
     constexpr double kEnvTol = 1e-4;
 
