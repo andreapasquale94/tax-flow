@@ -29,6 +29,7 @@ tax_add_test(test_ads_driver SOURCES ads/test_driver.cpp)
 tax_add_test(test_ads_merge SOURCES ads/test_merge.cpp)
 tax_add_test(test_ads_parallel SOURCES ads/test_parallel.cpp)
 tax_add_test(test_ads_refine SOURCES ads/test_refine.cpp)
+tax_add_test(test_ads_solution SOURCES ads/test_ads_solution.cpp)
 
 # ODE integrator
 add_subdirectory(ode)
