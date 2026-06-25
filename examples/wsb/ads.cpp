@@ -111,66 +111,43 @@ int main()
     }
     out << "  },\n";
 
-    std::cout << "[wsb_ads] running " << kNSnaps << " per-snapshot ADS propagations..."
+    std::cout << "[wsb_ads] running one ADS propagation with " << kNSnaps << " snapshots..."
               << std::flush;
+
+    const auto t_a = std::chrono::high_resolution_clock::now();
+    auto sol = tax::ads::propagate< P >( Feagin12{}, criterion, rhs(), ic_box, icCenter(), 0.0,
+                                         tFinal_days / kTimeU_days, times_canon, cfg, kThreads );
+    const auto t_b = std::chrono::high_resolution_clock::now();
+    const double total_ms = std::chrono::duration< double, std::milli >( t_b - t_a ).count();
 
     out << "  \"polygons\": [\n";
     std::vector< double > xs( boundary.size() ), ys( boundary.size() );
     std::vector< int > leaves_per_snap;
-    double total_ms = 0.0;
-    for ( int s = 0; s < kNSnaps; ++s )
+    const auto snaps = sol.snapshots();
+    for ( std::size_t s = 0; s < snaps.size(); ++s )
     {
-        const double t_snap = times_canon[s];
-        out << "    { \"t_days\": " << ( s * snap_step ) << ", \"leaves\": [";
-
-        if ( t_snap <= 0.0 )
+        const auto& part = snaps[s];
+        out << "    { \"t_days\": " << ( part.time() * kTimeU_days ) << ", \"leaves\": [";
+        bool first = true;
+        for ( const auto& leaf : part )
         {
             for ( std::size_t v = 0; v < boundary.size(); ++v )
             {
-                const tax::la::VecNT< M, double > d{ boundary[v][0], 0.0, 0.0, boundary[v][1] };
-                const auto pt = ic_box.denormalize( d );
-                xs[v] = pt( 0 );
-                ys[v] = pt( 1 );
+                const auto d = boundaryToBox( boundary[v][0], boundary[v][1] );
+                xs[v] = leaf.flowMap( 0 ).eval( d );
+                ys[v] = leaf.flowMap( 1 ).eval( d );
             }
-            out << "\n      { \"id\": 0, \"depth\": 0, \"x\": ";
+            if ( !first ) out << ",";
+            first = false;
+            out << "\n      { \"id\": " << leaf.id << ", \"depth\": " << leaf.depth << ", \"x\": ";
             writeJsonArray( out, xs );
             out << ", \"y\": ";
             writeJsonArray( out, ys );
-            out << " }\n    ";
-            leaves_per_snap.push_back( 1 );
-        } else
-        {
-            const auto t_a = std::chrono::high_resolution_clock::now();
-            auto tree = tax::ads::propagate< P >( Feagin12{}, criterion, rhs(), ic_box, icCenter(),
-                                                  0.0, t_snap, cfg, kThreads ).tree();
-            const auto t_b = std::chrono::high_resolution_clock::now();
-            total_ms += std::chrono::duration< double, std::milli >( t_b - t_a ).count();
-
-            bool first = true;
-            int rank = 0;
-            for ( int li : tree.done() )
-            {
-                const auto& leaf = tree.leaf( li );
-                const int id = rank++;
-                for ( std::size_t v = 0; v < boundary.size(); ++v )
-                {
-                    const auto d = boundaryToBox( boundary[v][0], boundary[v][1] );
-                    xs[v] = leaf.payload( 0 ).eval( d );
-                    ys[v] = leaf.payload( 1 ).eval( d );
-                }
-                if ( !first ) out << ",";
-                first = false;
-                out << "\n      { \"id\": " << id << ", \"depth\": " << leaf.depth << ", \"x\": ";
-                writeJsonArray( out, xs );
-                out << ", \"y\": ";
-                writeJsonArray( out, ys );
-                out << " }";
-            }
-            out << "\n    ";
-            leaves_per_snap.push_back( static_cast< int >( tree.done().size() ) );
+            out << " }";
         }
-
-        out << "] }" << ( s + 1 < kNSnaps ? "," : "" ) << "\n";
+        out << ( part.size() ? "\n    " : "" ) << "] }" << ( s + 1 < snaps.size() ? "," : "" )
+            << "\n";
+        leaves_per_snap.push_back( static_cast< int >( part.size() ) );
     }
     out << "  ],\n";
     out << "  \"timing\": { \"elapsed_ms\": " << total_ms << " }\n";

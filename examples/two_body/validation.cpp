@@ -290,46 +290,26 @@ int main()
     std::vector< std::vector< LeafPolygon > > ads_leaves_per_snap( kNSnaps );
 
     std::cout << "[validation] computing per-snapshot ADS envelopes..." << std::flush;
-    for ( int s = 0; s < kNSnaps; ++s )
+    auto env_sol = tax::ads::propagate< kEnvP >(
+        Verner89{}, tax::ads::TruncationCriterion{ kEnvTol, /*maxDepth=*/8 }, rhs(), ic_box,
+        icCenter(), 0.0, tFinal, times, cfg );
+
+    const auto env_snaps = env_sol.snapshots();
+    for ( std::size_t s = 0; s < env_snaps.size() && s < static_cast< std::size_t >( kNSnaps );
+          ++s )
     {
-        const double t_snap = times[static_cast< std::size_t >( s )];
-
-        if ( t_snap <= 0.0 )
+        for ( const auto& leaf : env_snaps[s] )
         {
-            // Trivial: one polygon equal to the IC box image (in state space
-            // this is the box itself).
-            LeafPolygon poly{};
-            poly.xs.resize( boundary.size() );
-            poly.ys.resize( boundary.size() );
-            for ( std::size_t v = 0; v < boundary.size(); ++v )
-            {
-                const tax::la::VecNT< 4, double > d{ 0.0, boundary[v][0], 0.0, boundary[v][1] };
-                const auto pt = ic_box.denormalize( d );
-                poly.xs[v] = pt( 0 );
-                poly.ys[v] = pt( 1 );
-            }
-            ads_leaves_per_snap[static_cast< std::size_t >( s )].push_back( std::move( poly ) );
-            continue;
-        }
-
-        auto tree = tax::ads::propagate< kEnvP >(
-                        Verner89{}, tax::ads::TruncationCriterion{ kEnvTol, /*maxDepth=*/8 }, rhs(),
-                        ic_box, icCenter(), 0.0, t_snap, cfg )
-                        .tree();
-
-        for ( int li : tree.done() )
-        {
-            const auto& leaf = tree.leaf( li );
             LeafPolygon poly{};
             poly.xs.resize( boundary.size() );
             poly.ys.resize( boundary.size() );
             for ( std::size_t v = 0; v < boundary.size(); ++v )
             {
                 const std::array< double, 4 > d{ 0.0, boundary[v][0], 0.0, boundary[v][1] };
-                poly.xs[v] = leaf.payload( 0 ).eval( d );
-                poly.ys[v] = leaf.payload( 1 ).eval( d );
+                poly.xs[v] = leaf.flowMap( 0 ).eval( d );
+                poly.ys[v] = leaf.flowMap( 1 ).eval( d );
             }
-            ads_leaves_per_snap[static_cast< std::size_t >( s )].push_back( std::move( poly ) );
+            ads_leaves_per_snap[s].push_back( std::move( poly ) );
         }
     }
     std::cout << " done.\n";

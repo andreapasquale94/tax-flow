@@ -55,24 +55,18 @@ int main()
     std::vector< Snapshot > snapshots;
     std::string leaf_counts;
     Stopwatch clock;
-    for ( double t : example::linspace( 0.0, t_final, kNSnaps ) )
+
+    // One propagation; the snapshot grid records the partition at each time.
+    const auto grid_times = example::linspace( 0.0, t_final, kNSnaps );
+    auto sol = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), ic_box, icCenter(), 0.0,
+                                         t_final, grid_times, cfg, adsThreads() );
+
+    for ( const auto& part : sol.snapshots() )
     {
-        Snapshot snap{ t, {} };
-        if ( t <= 0.0 )
-        {
-            snap.leaves.push_back( boxPolygon( ic_box, boundary, boundaryToBox ) );
-        } else
-        {
-            auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), ic_box, icCenter(),
-                                                  0.0, t, cfg, adsThreads() ).tree();
-            int id = 0;
-            for ( int li : tree.done() )
-            {
-                const auto& leaf = tree.leaf( li );
-                snap.leaves.push_back(
-                    evalPolygon( leaf.payload, boundary, boundaryToBox, id++, leaf.depth ) );
-            }
-        }
+        Snapshot snap{ part.time(), {} };
+        for ( const auto& leaf : part )
+            snap.leaves.push_back(
+                evalPolygon( leaf.flowMap, boundary, boundaryToBox, leaf.id, leaf.depth ) );
         leaf_counts += ( leaf_counts.empty() ? "" : ", " ) + std::to_string( snap.leaves.size() );
         snapshots.push_back( std::move( snap ) );
     }
