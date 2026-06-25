@@ -117,7 +117,7 @@ int main( int argc, char** argv )
     for ( double t : snap_times )
     {
         auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), full_box,
-                                              icCenter( a_max ), 0.0, t, cfg, adsThreads() );
+                                              icCenter( a_max ), 0.0, t, cfg, adsThreads() ).tree();
         int n_leaves = 0;
         for ( int li : tree.done() )
         {

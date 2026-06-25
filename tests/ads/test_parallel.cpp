@@ -58,7 +58,7 @@ Tree runWith( int num_threads )
 
     AdsDriver< Stepper, TruncationCriterion > driver{
         TruncationCriterion{ /*tol=*/1e-7, /*maxDepth=*/6 }, cfg, {}, num_threads };
-    return driver.run( rhs(), ic_box, center, /*t0=*/0.0, t1 );
+    return driver.run( rhs(), ic_box, center, /*t0=*/0.0, t1 ).tree();
 }
 
 void expectTreesEqual( const Tree& a, const Tree& b )

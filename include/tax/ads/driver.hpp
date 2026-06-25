@@ -16,6 +16,7 @@
 #include <mutex>
 #include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/solution.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
@@ -46,6 +47,7 @@ class AdsDriver
 
     using Tree = AdsTree< State, M, T >;
     using BoxT = Box< T, M >;
+    using LeafSol = tax::ode::Solution< Stepper, State >;
 
     // The driver uses Stepper::T as the (real) time/scalar type. Embedded-RK
     // steppers expose T == double; TaylorStepper exposes T == State::Scalar (a
@@ -64,20 +66,22 @@ class AdsDriver
     }
 
     template < class F >
-    [[nodiscard]] Tree run( F&& rhs, const BoxT& ic_box, const Eigen::Matrix< T, D, 1 >& ic_center,
-                            T t0, T t1 )
+    [[nodiscard]] AdsSolution< Stepper, M > run( F&& rhs, const BoxT& ic_box,
+                                                 const Eigen::Matrix< T, D, 1 >& ic_center, T t0,
+                                                 T t1 )
     {
         Tree tree;
         State root_state = tax::ads::create< N, M >( ic_box, ic_center );
         (void)tree.init( ic_box, std::move( root_state ), t0 );
 
+        std::vector< LeafSol > leafSol;
         if ( num_threads_ > 1 )
-            driveParallel( rhs, tree, t1 );
+            driveParallel( rhs, tree, leafSol, t1 );
         else
-            driveSerial( rhs, tree, t1 );
+            driveSerial( rhs, tree, leafSol, t1 );
 
         tree.canonicalizeDone();
-        return tree;
+        return AdsSolution< Stepper, M >{ std::move( tree ), std::move( leafSol ), t0, t1 };
     }
 
    protected:
@@ -90,7 +94,7 @@ class AdsDriver
         T splitTime{};
         State left{};
         State right{};
-        State finalPayload{};
+        LeafSol leafSol{};
     };
 
     // Pure, lock-free: integrate one leaf from tEntry to t1 with the
@@ -125,13 +129,13 @@ class AdsDriver
         } else
         {
             v.split = false;
-            v.finalPayload = std::move( sol.x.back() );
         }
+        v.leafSol = std::move( sol );  // capture events + steps (read sol.x.back() above first)
         return v;
     }
 
     template < class F >
-    void driveSerial( const F& rhs, Tree& tree, T t1 )
+    void driveSerial( const F& rhs, Tree& tree, std::vector< LeafSol >& leafSol, T t1 )
     {
         while ( !tree.empty() )
         {
@@ -140,15 +144,19 @@ class AdsDriver
 
             LeafVerdict v = stepLeaf( rhs, l.payload, l.tEntry, l.depth, l.box, t1 );
 
+            if ( static_cast< int >( leafSol.size() ) <= idx )
+                leafSol.resize( static_cast< std::size_t >( idx ) + 1 );
+
             if ( v.split )
             {
                 (void)tree.split( idx, v.dim, std::move( v.left ), std::move( v.right ),
                                   v.splitTime );
             } else
             {
-                tree.leaf( idx ).payload = std::move( v.finalPayload );
+                tree.leaf( idx ).payload = v.leafSol.x.back();
                 tree.finalize( idx );
             }
+            leafSol[static_cast< std::size_t >( idx )] = std::move( v.leafSol );
         }
     }
 
@@ -159,7 +167,7 @@ class AdsDriver
     // Termination: queue empty AND no task in flight. Worker exceptions
     // are captured (first wins) and rethrown on the calling thread.
     template < class F >
-    void driveParallel( const F& rhs, Tree& tree, T t1 )
+    void driveParallel( const F& rhs, Tree& tree, std::vector< LeafSol >& leafSol, T t1 )
     {
         std::mutex mtx;
         std::condition_variable cv;
@@ -213,6 +221,8 @@ class AdsDriver
                 }
 
                 lk.lock();
+                if ( static_cast< int >( leafSol.size() ) <= idx )
+                    leafSol.resize( static_cast< std::size_t >( idx ) + 1 );
                 bool do_notify;
                 if ( v.split )
                 {
@@ -222,7 +232,7 @@ class AdsDriver
                     do_notify = true;  // two new leaves are now available to claim
                 } else
                 {
-                    tree.leaf( idx ).payload = std::move( v.finalPayload );
+                    tree.leaf( idx ).payload = v.leafSol.x.back();
                     tree.finalize( idx );
                     --in_flight;
                     // Finalize adds no work, so only wake the pool when this was the
@@ -231,6 +241,7 @@ class AdsDriver
                     // just wake idle workers that immediately re-block (thundering herd).
                     do_notify = ( in_flight == 0 && tree.empty() );
                 }
+                leafSol[static_cast< std::size_t >( idx )] = std::move( v.leafSol );
                 lk.unlock();
                 // Notify outside the lock so woken workers don't immediately contend
                 // on the mutex we still hold.

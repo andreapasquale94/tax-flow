@@ -142,7 +142,7 @@ int main()
         {
             const auto t_a = std::chrono::high_resolution_clock::now();
             auto tree = tax::ads::propagate< P >( Feagin12{}, criterion, rhs(), ic_box, icCenter(),
-                                                  0.0, t_snap, cfg, kThreads );
+                                                  0.0, t_snap, cfg, kThreads ).tree();
             const auto t_b = std::chrono::high_resolution_clock::now();
             total_ms += std::chrono::duration< double, std::milli >( t_b - t_a ).count();
 

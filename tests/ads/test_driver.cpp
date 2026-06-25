@@ -75,7 +75,8 @@ TEST( AdsDriver, MildlyNonlinearOscillatorMatchesReference )
     AdsDriver< Stepper, TruncationCriterion > driver{
         TruncationCriterion{ /*tol=*/1e-4, /*maxDepth=*/8 }, cfg };
 
-    auto tree = driver.run( rhs(), ic_box, center, /*t0=*/0.0, t1 );
+    auto sol = driver.run( rhs(), ic_box, center, /*t0=*/0.0, t1 );
+    const auto& tree = sol.tree();
 
     EXPECT_GE( tree.done().size(), 1u );
 
@@ -164,7 +165,8 @@ TEST( AdsDriver, ExtraUserEventIsForwarded )
         TruncationCriterion{ /*tol=*/1.0, /*maxDepth=*/0 },  // never split
         cfg, std::move( extras ) };
 
-    auto tree = driver.run( rhs(), ic_box, center, 0.0, t1 );
+    auto sol = driver.run( rhs(), ic_box, center, 0.0, t1 );
+    const auto& tree = sol.tree();
     EXPECT_EQ( tree.done().size(), 1u );
     EXPECT_GT( *counter, 0 );
 }

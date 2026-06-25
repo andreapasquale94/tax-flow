@@ -153,7 +153,8 @@ Cell runAdsLike( std::string name, Criterion crit, const BoxT& ic_box,
 
     const auto t0 = std::chrono::high_resolution_clock::now();
     auto tree =
-        tax::ads::propagate< P >( Verner89{}, crit, rhs(), ic_box, icCenter(), 0.0, tFinal, cfg );
+        tax::ads::propagate< P >( Verner89{}, crit, rhs(), ic_box, icCenter(), 0.0, tFinal, cfg )
+            .tree();
     const auto t1 = std::chrono::high_resolution_clock::now();
     const double ms = std::chrono::duration< double, std::milli >( t1 - t0 ).count();
 
@@ -312,8 +313,9 @@ int main()
         }
 
         auto tree = tax::ads::propagate< kEnvP >(
-            Verner89{}, tax::ads::TruncationCriterion{ kEnvTol, /*maxDepth=*/8 }, rhs(), ic_box,
-            icCenter(), 0.0, t_snap, cfg );
+                        Verner89{}, tax::ads::TruncationCriterion{ kEnvTol, /*maxDepth=*/8 }, rhs(),
+                        ic_box, icCenter(), 0.0, t_snap, cfg )
+                        .tree();
 
         for ( int li : tree.done() )
         {

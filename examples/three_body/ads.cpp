@@ -61,7 +61,7 @@ int main()
         } else
         {
             auto tree = tax::ads::propagate< P >( Verner89{}, criterion, rhs(), ic_box, icCenter(),
-                                                  0.0, t, cfg, adsThreads() );
+                                                  0.0, t, cfg, adsThreads() ).tree();
             int id = 0;
             for ( int li : tree.done() )
             {
