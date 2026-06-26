@@ -1,16 +1,22 @@
 // tests/ads/test_zonotope.cpp
 //
-// Zonotope (parallelotope) domain: geometry primitives.
-// The end-to-end propagation, seeding, and merge tests depend on Task 3.x
-// (create(zono, x0), generic propagate over Zonotope) and are deferred.
+// Zonotope (parallelotope) domain: geometry primitives and identity-state
+// seeding. End-to-end propagation and merge tests depend on Task 3.7
+// (generic propagate over Zonotope) and are deferred.
 //
-// TODO(Phase 3): create/propagate/merge zonotope tests added in Tasks 3.3/3.7
+// TODO(Phase 3, Task 3.7): PropagateMatchesReference, FewerLeavesThanBoundingBox,
+//   SplitThenMergeRoundTrip deferred (need generic propagate over Zonotope)
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <tax/ads/da_state.hpp>
 #include <tax/ads/domains/zonotope.hpp>
+#include <tax/core/multi_index.hpp>
 #include <tax/la/types.hpp>
+#include <tax/tax.hpp>
 #include <utility>
 
 // Permanent compile-time guards: Zonotope must model both domain tiers.
@@ -20,8 +26,12 @@ static_assert( tax::ads::LocatableDomain< tax::ads::Zonotope< double, 2 > >,
 
 namespace
 {
+constexpr int P = 6;
 constexpr int M = 2;
+constexpr int D = 2;
 
+using TE = tax::TE< P, M >;
+using DAState = tax::la::VecNT< D, TE >;
 using V2 = tax::la::VecNT< M, double >;
 using Mat2 = tax::la::MatNT< M, double >;
 
@@ -94,4 +104,28 @@ TEST( Zonotope, SplitBisectsGenerator )
 
     // splitOrdinate orders the pair left < right along the split direction.
     EXPECT_LT( L.splitOrdinate( 0 ), R.splitOrdinate( 0 ) );
+}
+
+// ---------------------------------------------------------------------------
+// DA state seeding
+// ---------------------------------------------------------------------------
+
+TEST( Zonotope, CreateSeedsGeneratorColumns )
+{
+    auto z = orientedThinZonotope();
+    V2 x0{ 1.0, 0.0 };
+    DAState state = tax::ads::create< P, M >( z, x0 );
+
+    for ( int i = 0; i < D; ++i )
+    {
+        // Constant term is the IC centre.
+        EXPECT_DOUBLE_EQ( state( i )[0], x0( i ) );
+        // First-order coefficient w.r.t. ξ_j is generators(i, j).
+        for ( int j = 0; j < M; ++j )
+        {
+            tax::MultiIndex< M > alpha{};
+            alpha[static_cast< std::size_t >( j )] = 1;
+            EXPECT_DOUBLE_EQ( state( i )[tax::flatIndex< M >( alpha )], z.generators( i, j ) );
+        }
+    }
 }

@@ -9,7 +9,10 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <tax/ads/da_state.hpp>
 #include <tax/ads/domains/reorient.hpp>
+#include <tax/ads/domains/zonotope.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
@@ -97,4 +100,28 @@ TEST( Reorient, FlowAlignedRotationOrthogonalizesColumns )
     EXPECT_TRUE( ( V.transpose() * V ).isApprox( Mat2::Identity(), 1e-12 ) );
 }
 
-// TODO(Phase 3, Task 3.3): IdentityAndZonotopeStayConsistent (needs create(zono,x0))
+// Re-orienting the identity flow map and its zonotope generators by the same R
+// describes the same physical IC: create(z)(η) reorients to create(z·R)(η)·...
+// Concretely, reorientState(create(z, c)) == create(reorientZonotope(z, R), c)
+// as polynomials in η (both equal c + G·R·η).
+TEST( Reorient, IdentityAndZonotopeStayConsistent )
+{
+    const Mat2 R = rot( 0.4 );
+    Mat2 G;
+    G << 0.5, 0.1, -0.2, 0.4;
+
+    tax::ads::Zonotope< double, M > z;
+    z.center = V2{ 0.0, 0.0 };
+    z.generators = G;
+    const tax::la::VecNT< D, double > c{ 1.0, 2.0 };
+
+    const DAState id = tax::ads::create< P, M >( z, c );
+    const DAState id_re = tax::ads::reorientState( id, R );
+
+    const auto zr = tax::ads::reorientZonotope( z, R );
+    const DAState id_zr = tax::ads::create< P, M >( zr, c );
+
+    constexpr std::size_t Nc = tax::numMonomials( P, M );
+    for ( int i = 0; i < D; ++i )
+        for ( std::size_t k = 0; k < Nc; ++k ) EXPECT_NEAR( id_re( i )[k], id_zr( i )[k], 1e-12 );
+}

@@ -17,6 +17,7 @@
 #include <array>
 #include <cstddef>
 #include <tax/ads/domains/box.hpp>
+#include <tax/ads/domains/zonotope.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
@@ -107,6 +108,39 @@ create( const Box< T, M >& box, const Eigen::Matrix< T, D, 1 >& x0 )
             tax::MultiIndex< M > alpha{};
             alpha[static_cast< std::size_t >( i )] = 1;
             comp[tax::flatIndex< M >( alpha )] = box.halfWidth( i );
+        }
+        out( i ) = std::move( comp );
+    }
+    return out;
+}
+
+// create<P, M[, Storage]>(zono, x0): identity DA state on a Zonotope. State
+// component i (i < M) gets the i-th generator row, so x_i(xi)=x0_i+sum_j G_ij xi_j;
+// rows i >= M stay constant at x0_i, as the Box overload.
+template < int P, int M, class Storage = tax::storage::Dense, class T, int D >
+[[nodiscard]] Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D,
+                             1 >
+create( const Zonotope< T, M >& zono, const Eigen::Matrix< T, D, 1 >& x0 )
+{
+    static_assert( D == Eigen::Dynamic || D >= M,
+                   "ads::create(): state dimension D must be >= M (every zonotope factor must "
+                   "map to a state component)." );
+    Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D, 1 > out;
+    if constexpr ( D == Eigen::Dynamic ) out.resize( x0.size() );
+    for ( Eigen::Index i = 0; i < x0.size(); ++i )
+    {
+        tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage > comp{};
+        comp[0] = x0( i );
+        if ( i < M )
+        {
+            for ( int j = 0; j < M; ++j )
+            {
+                const T g = zono.generators( static_cast< Eigen::Index >( i ), j );
+                if ( g == T{ 0 } ) continue;
+                tax::MultiIndex< M > alpha{};
+                alpha[static_cast< std::size_t >( j )] = 1;
+                comp[tax::flatIndex< M >( alpha )] = g;
+            }
         }
         out( i ) = std::move( comp );
     }
