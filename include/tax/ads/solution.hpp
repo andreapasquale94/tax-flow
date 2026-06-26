@@ -27,15 +27,15 @@ namespace tax::ads
 // carry it, so a user's own (unsynchronized) events never enter a snapshot.
 inline constexpr const char* kSnapshotLabel = "ads:grid";
 
-template < class Stepper, int M >
+template < class Stepper, int M, class Domain = Box< typename Stepper::T, M > >
 class AdsSolution
 {
    public:
     using State = typename Stepper::State;
     using T = typename Stepper::T;
     using LeafSol = tax::ode::Solution< Stepper, State >;
-    using Tree = AdsTree< State, M, T >;
-    using BoxT = Box< T, M >;
+    using Tree = AdsTree< State, M, T, Domain >;
+    using BoxT = Domain;
 
     // One leaf within a partition: its box, its DA flow map at the snapshot
     // time, its depth, and a deterministic id (index in canonical order).
@@ -81,6 +81,10 @@ class AdsSolution
     }
 
     [[nodiscard]] const Tree& tree() const noexcept { return tree_; }
+    [[nodiscard]] Tree& tree() noexcept
+    {
+        return tree_;
+    }  // mutable access, e.g. for merge(sol.tree(), crit)
     [[nodiscard]] const LeafSol& leaf( int idx ) const noexcept
     {
         return leafSol_[static_cast< std::size_t >( idx )];
