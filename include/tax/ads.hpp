@@ -5,6 +5,7 @@
 #pragma once
 
 #include <tax/ads/box.hpp>
+#include <tax/ads/cpz.hpp>
 #include <tax/ads/criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/driver.hpp>

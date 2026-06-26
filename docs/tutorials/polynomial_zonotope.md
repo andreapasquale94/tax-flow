@@ -67,11 +67,16 @@ gives that leaf an **oriented (parallelotope) factor box** instead of an
 axis-aligned one. ADS subdivision turns the whole tree into a **piecewise
 polynomial zonotope**: a union of leaves that tile the propagated set.
 
-The only constraint in play is the per-leaf box bound \(-1 \le \xi_k \le 1\) —
-the domain restriction that makes each leaf valid on its sub-box. The general
-equality constraint \(A\boldsymbol{\xi}=\mathbf{b}\) of a *constrained* zonotope
-is **not yet implemented** (see [Limitations](#limitations)); the parallelotope
-is the unconstrained member of that family.
+Two further ingredients are prototyped:
+
+* **Orientation** — [`tax::ads::Zonotope`](../ads/zonotope.md) makes the factor
+  box oriented; choosing that orientation from the flow (below) needs the fewest
+  leaves.
+* **Polynomial equality constraints** \(g_j(\boldsymbol{\xi}) = 0\) —
+  [`tax::ads::cpz`](#constrained-polynomial-zonotopes) carries one or more
+  constraint polynomials alongside the value map, giving the genuine
+  **constrained polynomial zonotope** and the *split-by-constraint* pruning that
+  collapses a box onto a lower-dimensional set.
 
 ### On a simple domain
 
@@ -179,6 +184,64 @@ leaf polynomial zonotopes do not merely *bound* the propagated set — they
 
 ---
 
+## Constrained polynomial zonotopes
+
+Everything above describes an *unconstrained* set — the factors range over the
+whole box. A **constrained polynomial zonotope** ([`tax::ads::cpz`](https://github.com/andreapasquale94/tax/tree/main/include/tax/ads/cpz.hpp))
+adds polynomial equality constraints on those factors:
+
+$$
+\big\{\, \mathbf{x}(\boldsymbol{\xi}) \;:\; \boldsymbol{\xi} \in [-1,1]^M,\; g_j(\boldsymbol{\xi}) = 0 \big\}.
+$$
+
+The constraints carve a **lower-dimensional sub-manifold** out of the box. A
+natural astrodynamics case: the initial state is uncertain in \((y, v_y)\), but
+the spacecraft is known to be on an orbit of fixed **energy** (fixed
+semi-major axis). The valid ICs are then the curve
+\(\{(y, v_y) \in \text{box} : E(y, v_y) = E_0\}\), with
+\(E = \tfrac12 v^2 - 1/r\). Expanding the energy as a DA gives a *polynomial*
+constraint \(g(\boldsymbol{\xi}) = E(\boldsymbol{\xi}) - E_0\) — exactly a CPZ
+(`examples/two_body/cpz.cpp`).
+
+Because the constraint is a polynomial in the same factors, it **splits like the
+value map** (the same `substituteAxis` re-expansion), and it gives a cheap
+emptiness test: over \(\boldsymbol{\xi} \in [-1,1]^M\) the constraint ranges
+within \([g_0 - r,\, g_0 + r]\) with \(r = \sum_{\alpha\neq 0} |g_\alpha|\). If
+\(0\) is outside that interval the sub-box **cannot** satisfy \(g=0\) and the
+leaf is pruned. Subdivide, prune the infeasible children, and only the band
+straddling the constraint survives.
+
+![Constrained polynomial zonotope: fixed-energy set](img/two_body_cpz.png)
+
+* **(a)** The fixed-energy curve through the \((y, v_y)\) box, and the feasible
+  band of sub-boxes that survives pruning — a thin sleeve around the curve, not
+  the whole box.
+* **(b)** **Dimensional collapse.** As the box is subdivided, the unpruned cell
+  count grows like the *area* (\(2^{\text{depth}}\)); the feasible count grows
+  only like the *length* (\(\approx 2^{\text{depth}/2}\)). At depth 16 that is
+  **384 feasible** cells out of 65536.
+* **(c)** Propagated to \(t = T/2\): the unconstrained box needs a **2-D ADS
+  tiling of 61 leaves**, but the constrained set is the **1-D curve carried by
+  just 12 leaves**. The red curve runs through the blue blob along where the
+  fixed-energy ICs actually land.
+
+Validated against **10000 Monte-Carlo samples drawn on the true energy curve**
+(propagated independently), the constrained leaves reproduce the cloud to
+RMS \(\approx 1.2\times10^{-5}\) (max \(6.3\times10^{-5}\)) — larger than the
+earlier cases because this box is ~5× wider, still at the \(10^{-6}\) split
+tolerance.
+
+| Representation | Leaves | Dimension |
+|----------------|-------:|:---------:|
+| Unconstrained box (2-D ADS) | 61 | 2 |
+| **Fixed-energy CPZ** | **12** | 1 |
+
+This is the **split-by-constraint** lever: the constraint does not just describe
+the set, it *prunes the work*, collapsing a 2-D box onto its 1-D constrained
+slice.
+
+---
+
 ## Reproduce it
 
 ```bash
@@ -200,6 +263,10 @@ python3 examples/plot/plot_two_body_zonotope_adaptive.py
 # 10000-sample Monte-Carlo validation (both scenarios)
 ./build/examples/zonotope_two_body_mc
 python3 examples/plot/plot_two_body_mc.py
+
+# constrained polynomial zonotope (fixed-energy set)
+./build/examples/two_body_cpz
+python3 examples/plot/plot_two_body_cpz.py
 ```
 
 ---
@@ -209,11 +276,14 @@ python3 examples/plot/plot_two_body_mc.py
 This is a prototype of the oriented / polynomial-zonotope path; the honest
 boundaries:
 
-* **Parallelotope only.** The generator matrix is square (no redundant
-  generators) and there is no equality-constraint store \(A\boldsymbol{\xi} =
-  \mathbf{b}\) — so the "constrained" zonotope's split-by-constraint (no
-  re-expansion) and arbitrary-polytope coverage are future work. The factor box
-  bound is the only constraint used.
+* **Parallelotope generators are square** (no redundant generators), so
+  arbitrary-polytope coverage is still future work.
+* **Constraints are prototyped but not wired into the driver.** `tax::ads::cpz`
+  carries and splits polynomial constraints and prunes infeasible leaves, but
+  the demonstration prunes a separate subdivision / filters an ordinary ADS run
+  rather than pruning *inside* `AdsDriver` in flight. Constraint feasibility uses
+  the first-order interval bound (\(L_1\) of the coefficients), which is sound
+  but not the tightest possible test.
 * **Orientation is chosen once, up front.** The flow-aligned frame comes from a
   single probe STM over the whole horizon. `reorientState` is the building block
   for *time-adaptive* re-orientation, but re-orienting mid-flight needs an
