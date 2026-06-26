@@ -239,6 +239,7 @@ struct VolumeRatioCriterion
         return std::abs( vp / denom - 1.0 ) <= tol;
     }
 
+   private:
     template < class T, int N, int M, class Storage, int D >
     [[nodiscard]] double imageVolume(
         const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
