@@ -295,7 +295,7 @@ template < int P, class Method, class Quality, class F, class T, int M, int D >
 {
     using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
-    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+    using Stepper = tax::ode::StepperType< Method, DAState >;
 
     RefineDriver< Stepper, Quality > driver{ std::move( quality ), std::move( cfg ), num_threads,
                                              split_dirs };

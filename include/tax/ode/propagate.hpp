@@ -130,6 +130,10 @@ using StepperT = typename StepperFor< Method, State >::type;
 
 }  // namespace detail
 
+// Public alias: map a method tag + State to its concrete Stepper type.
+template < class Method, class State >
+using StepperType = detail::StepperT< Method, State >;
+
 // Propagate an ODE. Returns a Solution holding accepted step boundaries
 // (save_steps=true by default) plus any recorded events.
 template < class Method, class F, class State, class T >

@@ -43,7 +43,7 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
 {
     using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
-    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+    using Stepper = tax::ode::StepperType< Method, DAState >;
 
     AdsDriver< Stepper, Criterion > driver{ std::move( crit ), std::move( cfg ), {}, num_threads };
     return driver.run( std::forward< F >( rhs ), ic_box, ic_center, t0, t1 );
@@ -60,7 +60,7 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
 {
     using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
-    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+    using Stepper = tax::ode::StepperType< Method, DAState >;
 
     typename AdsDriver< Stepper, Criterion >::ExtraEvt extras;
     extras.push_back( std::make_shared< tax::ode::GridEvent< DAState, T > >(
