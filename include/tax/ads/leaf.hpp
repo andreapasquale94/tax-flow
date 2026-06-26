@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 
 namespace tax::ads
 {

@@ -11,7 +11,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/refine.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/core/multi_index.hpp>

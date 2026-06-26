@@ -21,7 +21,7 @@
 #include <deque>
 #include <optional>
 #include <span>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/la/types.hpp>
 #include <utility>

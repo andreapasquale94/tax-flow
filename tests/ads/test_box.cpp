@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/la/types.hpp>
 
 using tax::ads::Box;

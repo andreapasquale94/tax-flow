@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/ode/solution.hpp>
 #include <utility>

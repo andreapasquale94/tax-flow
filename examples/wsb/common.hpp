@@ -26,7 +26,7 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>

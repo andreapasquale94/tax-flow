@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/split_criteria.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/tree.hpp>

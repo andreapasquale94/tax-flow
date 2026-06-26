@@ -21,7 +21,7 @@
 
 #include <memory>
 #include <string>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/solution.hpp>
 #include <tax/core/taylor_expansion.hpp>

@@ -14,7 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>

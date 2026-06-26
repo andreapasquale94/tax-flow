@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/tree.hpp>
 

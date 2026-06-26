@@ -59,7 +59,7 @@ tax-flow/
 │   │   ├── vector_ops.hpp    #   VectorOps<S> trait (scalar / TE / Eigen states)
 │   │   └── named.hpp         #   VectorOps for tax::named expansions as ODE state
 │   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
-│       ├── box.hpp, leaf.hpp, tree.hpp
+│       ├── domains/box.hpp, leaf.hpp, tree.hpp
 │       ├── split_criteria.hpp #   SplitCriterion, TruncationCriterion, NliCriterion
 │       ├── detail/nonlinearity_index.hpp
 │       ├── split_event.hpp, da_state.hpp

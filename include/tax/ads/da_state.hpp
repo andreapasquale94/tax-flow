@@ -16,7 +16,7 @@
 
 #include <array>
 #include <cstddef>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>

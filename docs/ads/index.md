@@ -102,7 +102,7 @@ dimension.
 
 | Header | Contents |
 |---|---|
-| `tax/ads/box.hpp` | `Box<T, M>` |
+| `tax/ads/domains/box.hpp` | `Box<T, M>` |
 | `tax/ads/leaf.hpp` | `Leaf<Payload, M, T>` |
 | `tax/ads/tree.hpp` | `AdsTree<Payload, M, T>` |
 | `tax/ads/da_state.hpp` | `create`, `split` (DA-state identity & re-identification) |

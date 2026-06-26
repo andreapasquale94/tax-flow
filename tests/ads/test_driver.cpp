@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/split_criteria.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/core/multi_index.hpp>

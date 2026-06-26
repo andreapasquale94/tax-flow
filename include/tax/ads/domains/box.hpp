@@ -1,4 +1,4 @@
-// include/tax/ads/box.hpp
+// include/tax/ads/domains/box.hpp
 //
 // Box<T, M> — axis-aligned hyperrectangle in M-dimensional space.
 // Used as the geometric primitive of the ADS tree: every leaf owns a
@@ -51,6 +51,10 @@ struct Box
         R.center( dim ) = center( dim ) + h;
         return { L, R };
     }
+
+    // Scalar position of the centre along axis `dim`. Mirrors Zonotope::splitOrdinate
+    // so merge() can order a sibling pair the same way for either domain.
+    [[nodiscard]] T splitOrdinate( int dim ) const noexcept { return center( dim ); }
 
     // Map d ∈ [-1, 1]^M to box coordinates: center + halfWidth ⊙ d.
     template < class Derived >

@@ -8,7 +8,7 @@
 
 #include <cstddef>
 #include <string>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/solution.hpp>
 #include <tax/ads/tree.hpp>

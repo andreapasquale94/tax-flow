@@ -35,7 +35,7 @@
 #include <exception>
 #include <mutex>
 #include <span>
-#include <tax/ads/box.hpp>
+#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/tree.hpp>
