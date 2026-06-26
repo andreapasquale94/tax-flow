@@ -7,6 +7,7 @@
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/domains/box.hpp>
 #include <tax/ads/domains/domain.hpp>
+#include <tax/ads/domains/reorient.hpp>
 #include <tax/ads/domains/zonotope.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/leaf.hpp>
