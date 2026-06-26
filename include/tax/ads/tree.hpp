@@ -30,12 +30,12 @@
 namespace tax::ads
 {
 
-template < class Payload, int M, class T = double >
+template < class Payload, int M, class T = double, class Domain = Box< T, M > >
 class AdsTree
 {
    public:
-    using LeafT = Leaf< Payload, M, T >;
-    using BoxT = Box< T, M >;
+    using LeafT = Leaf< Payload, M, T, Domain >;
+    using BoxT = Domain;
 
     [[nodiscard]] int init( BoxT box, Payload payload, T tEntry = T{ 0 } )
     {
@@ -182,12 +182,12 @@ class AdsTree
     void canonicalizeDone()
     {
         std::sort( doneList_.begin(), doneList_.end(), [this]( int a, int b ) {
-            const auto& ca = leaves_[static_cast< std::size_t >( a )].box.center;
-            const auto& cb = leaves_[static_cast< std::size_t >( b )].box.center;
+            const auto& da = leaves_[static_cast< std::size_t >( a )].box;
+            const auto& db = leaves_[static_cast< std::size_t >( b )].box;
             for ( int i = 0; i < M; ++i )
             {
-                if ( ca( i ) < cb( i ) ) return true;
-                if ( cb( i ) < ca( i ) ) return false;
+                if ( da.center( i ) < db.center( i ) ) return true;
+                if ( db.center( i ) < da.center( i ) ) return false;
             }
             return false;
         } );
