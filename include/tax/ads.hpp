@@ -10,7 +10,6 @@
 #include <tax/ads/driver.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/merge.hpp>
-#include <tax/ads/nonlinearity_index.hpp>
 #include <tax/ads/propagate.hpp>
 #include <tax/ads/refine.hpp>
 #include <tax/ads/refine_criteria.hpp>

@@ -107,7 +107,7 @@ dimension.
 | `tax/ads/tree.hpp` | `AdsTree<Payload, M, T>` |
 | `tax/ads/da_state.hpp` | `create`, `split` (DA-state identity & re-identification) |
 | `tax/ads/criteria.hpp` | `SplitCriterion`, `TruncationCriterion`, `NliCriterion` |
-| `tax/ads/nonlinearity_index.hpp` | LOADS helpers (`nonlinearityIndex`, `nliSplitDim`, …) |
+| `tax/ads/detail/nonlinearity_index.hpp` | LOADS helpers (`nonlinearityIndex`, `nliSplitDim`, …) |
 | `tax/ads/split_event.hpp` | `SplitRequest`, `SplitEvent` |
 | `tax/ads/driver.hpp` | `AdsDriver<Stepper, Criterion>` |
 | `tax/ads/propagate.hpp` | `propagate<P>(method, criterion, …)` |

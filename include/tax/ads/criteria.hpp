@@ -19,7 +19,7 @@
 #include <cmath>
 #include <concepts>
 #include <cstddef>
-#include <tax/ads/nonlinearity_index.hpp>
+#include <tax/ads/detail/nonlinearity_index.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>

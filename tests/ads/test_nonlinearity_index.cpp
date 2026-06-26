@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
-#include <tax/ads/nonlinearity_index.hpp>
+#include <tax/ads/detail/nonlinearity_index.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 

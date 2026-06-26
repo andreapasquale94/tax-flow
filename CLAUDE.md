@@ -61,7 +61,8 @@ tax-flow/
 │   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
 │       ├── box.hpp, leaf.hpp, tree.hpp
 │       ├── criteria.hpp      #   SplitCriterion, TruncationCriterion, NliCriterion
-│       ├── nonlinearity_index.hpp, split_event.hpp, da_state.hpp
+│       ├── detail/nonlinearity_index.hpp
+│       ├── split_event.hpp, da_state.hpp
 │       ├── driver.hpp, propagate.hpp, merge.hpp
 │       └── refine.hpp, refine_criteria.hpp
 ├── tests/                    # Google Test suite
