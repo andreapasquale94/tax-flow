@@ -86,6 +86,52 @@ periapsis *return* is best resolved by axis-aligned cuts — there the box would
 in turn split less. The example integrates the favourable arc and prints both
 leaf counts at every snapshot so the trade-off is visible, not hidden.
 
+## Adaptive orientation: aligning the frame to the flow
+
+A *fixed* orientation is arbitrary — the two-body example above wins over most
+of the orbit but loses at the periapsis return. The fix is to choose the frame
+from the dynamics. `include/tax/ads/reorient.hpp` provides the primitives:
+
+| Function | Role |
+|----------|------|
+| `reorientState(x, R)` | compose the flow map with a linear factor change: `y(η) = x(R·η)` |
+| `linearPart(x)` | `A = ∂x/∂ξ\|₀`, the local STM (D×M) |
+| `flowAlignedRotation(A)` | `V` from `SVD(A)`, so `A·V` has orthogonal columns |
+| `reorientZonotope(z, R)` | keep generators in step: `G → G·R` |
+
+**The geometric catch.** A linear change of factor variables `ξ = R·η` maps the
+cube `[-1,1]^M` to `R·[-1,1]^M`, which is a cube again *only* when `R` is a
+signed permutation. So re-orientation is exact only when (a) the uncertainty is
+an **ellipsoid** — the covering parallelotope is then free to orient — or (b)
+you re-wrap a leaf with a controlled over-approximation. The prototype
+demonstrates case (a).
+
+**Recipe (ellipsoidal IC).** Cover the covariance `Σ = L Lᵀ` with the
+parallelotope `L·cube ⊇` ellipsoid. Probe the flow once (one un-split
+propagation) to read `Φ = ∂x/∂ξ`, then pick `V = flowAlignedRotation(Φ·L)` and
+use generators `G = L·V`. The propagated set `Φ·L·V = U·Σ` then has orthogonal
+generators — no thin diagonal sliver to over-split. `examples/two_body/
+zonotope_adaptive.cpp` compares three coverings of the *same* ellipsoid over a
+**full period** (the case the fixed frame lost):
+
+| Covering | Leaves @ T |
+|----------|-----------|
+| Flow-aligned `L·V` | **50** |
+| Axis-aligned box | 56 |
+| Fixed Cholesky `L` | 210 |
+
+The flow-aligned covering needs fewest leaves *at every snapshot*, fixing the
+periapsis flip — even though it covers a **larger** initial area than the box.
+The win is from orientation, not size: a badly oriented frame (the fixed
+Cholesky one) is 4× worse. The same run also re-expresses the probe map with
+`reorientState` and confirms the deformation is diagonalised (the STM
+off-diagonal drops from ~1.2 to ~0).
+
+```bash
+./build/examples/two_body_zonotope_adaptive
+python3 examples/plot/plot_two_body_zonotope_adaptive.py   # -> two_body_zonotope_adaptive.png
+```
+
 ## Scope and limitations (prototype)
 
 - **Parallelotope only.** `G` is square (`M` generators); there is no support yet
@@ -95,6 +141,11 @@ leaf counts at every snapshot so the trade-off is visible, not hidden.
   and honouring it in `contains` / `merge` is the natural next step.
 - **`refine.hpp` is not generalised** — the classic `AdsDriver` / `propagate`
   path is. The refine driver still assumes `Box`.
+- **Orientation is chosen once, up front** (a single probe-STM alignment).
+  `reorientState` is the building block for *time-adaptive* re-orientation —
+  re-wrapping a leaf mid-flight when the local frame drifts — but that is not
+  wired into the driver yet, and the mid-flight case needs the
+  over-approximation accounting noted above.
 - **`merge` ordering** of a sibling pair uses `splitOrdinate` (centre projected
   onto the split generator), which is correct for a parallelotope but has not
   been stressed on near-degenerate generator matrices.

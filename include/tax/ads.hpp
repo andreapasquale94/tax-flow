@@ -13,6 +13,7 @@
 #include <tax/ads/nonlinearity_index.hpp>
 #include <tax/ads/propagate.hpp>
 #include <tax/ads/refine.hpp>
+#include <tax/ads/reorient.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>
