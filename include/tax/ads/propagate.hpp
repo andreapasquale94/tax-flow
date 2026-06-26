@@ -20,6 +20,7 @@
 
 #include <tax/ads/box.hpp>
 #include <tax/ads/driver.hpp>
+#include <tax/ads/zonotope.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/propagate.hpp>
@@ -40,6 +41,29 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
 
     AdsDriver< Stepper, Criterion > driver{ std::move( crit ), std::move( cfg ), {}, num_threads };
     return driver.run( std::forward< F >( rhs ), ic_box, ic_center, t0, t1 );
+}
+
+// Zonotope (parallelotope) overload: identical contract, but each leaf wraps
+// an oriented parallelotope instead of an axis-aligned box. Use this when the
+// initial-condition set is correlated / rotated — a single oriented leaf then
+// covers what an axis-aligned box would over-bound (and therefore over-split).
+//
+//   auto tree = tax::ads::propagate<6>(
+//       tax::ode::methods::Verner89{}, crit, rhs,
+//       tax::ads::Zonotope<double, 2>{ center, generators },
+//       ic_center, t0, t1, cfg);
+template < int P, class Method, class Criterion, class F, class T, int M, int D >
+[[nodiscard]] auto propagate( Method, Criterion crit, F&& rhs, const Zonotope< T, M >& ic_zono,
+                              const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
+                              tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1 )
+{
+    using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
+    using DAState = Eigen::Matrix< TE, D, 1 >;
+    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+
+    AdsDriver< Stepper, Criterion, Zonotope< T, M > > driver{
+        std::move( crit ), std::move( cfg ), {}, num_threads };
+    return driver.run( std::forward< F >( rhs ), ic_zono, ic_center, t0, t1 );
 }
 
 }  // namespace tax::ads

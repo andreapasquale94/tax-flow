@@ -13,10 +13,14 @@
 namespace tax::ads
 {
 
-template < class Payload, int M, class T = double >
+template < class Payload, int M, class T = double, class Domain = Box< T, M > >
 struct Leaf
 {
-    Box< T, M > box{};
+    // The leaf's subdomain of initial conditions. Defaults to an axis-aligned
+    // Box; any domain providing center / split / contains / splitOrdinate
+    // (e.g. Zonotope) can be substituted. The member keeps the name `box` for
+    // source compatibility regardless of the concrete domain type.
+    Domain box{};
     Payload payload{};
     int depth = 0;
     bool done = false;

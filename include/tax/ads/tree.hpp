@@ -30,12 +30,12 @@
 namespace tax::ads
 {
 
-template < class Payload, int M, class T = double >
+template < class Payload, int M, class T = double, class Domain = Box< T, M > >
 class AdsTree
 {
    public:
-    using LeafT = Leaf< Payload, M, T >;
-    using BoxT = Box< T, M >;
+    using LeafT = Leaf< Payload, M, T, Domain >;
+    using BoxT = Domain;
 
     [[nodiscard]] int init( BoxT box, Payload payload, T tEntry = T{ 0 } )
     {

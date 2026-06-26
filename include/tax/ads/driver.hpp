@@ -30,7 +30,10 @@
 namespace tax::ads
 {
 
-template < class Stepper, class Criterion >
+// Domain defaults to void, resolved below to Box<T, M> (T, M are derived from
+// Stepper, so they cannot be named in the template default). Pass an explicit
+// Domain (e.g. Zonotope<T, M>) to propagate oriented parallelotope leaves.
+template < class Stepper, class Criterion, class Domain = void >
 class AdsDriver
 {
    public:
@@ -44,8 +47,9 @@ class AdsDriver
     static constexpr int M = TE::vars_v;
     static constexpr int D = State::RowsAtCompileTime;
 
-    using Tree = AdsTree< State, M, T >;
-    using BoxT = Box< T, M >;
+    using DomainT = std::conditional_t< std::is_void_v< Domain >, Box< T, M >, Domain >;
+    using Tree = AdsTree< State, M, T, DomainT >;
+    using BoxT = DomainT;
 
     // The driver uses Stepper::T as the (real) time/scalar type. Embedded-RK
     // steppers expose T == double; TaylorStepper exposes T == State::Scalar (a

@@ -52,6 +52,11 @@ struct Box
         return { L, R };
     }
 
+    // Scalar position of the centre along axis `dim`. Mirrors
+    // Zonotope::splitOrdinate so merge() can order a sibling pair the same
+    // way for either domain (left = smaller ordinate along the split axis).
+    [[nodiscard]] T splitOrdinate( int dim ) const noexcept { return center( dim ); }
+
     // Map d ∈ [-1, 1]^M to box coordinates: center + halfWidth ⊙ d.
     template < class Derived >
     [[nodiscard]] tax::la::VecNT< M, T > denormalize(

@@ -17,6 +17,7 @@
 #include <array>
 #include <cstddef>
 #include <tax/ads/box.hpp>
+#include <tax/ads/zonotope.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
@@ -113,15 +114,52 @@ create( const Box< T, M >& box, const Eigen::Matrix< T, D, 1 >& x0 )
     return out;
 }
 
-// split(state, parent_box, dim): produce the left/right halves.
-// Deduces Storage from the input.
-template < class T, int N, int M, class Storage, int D >
+// create<P, M[, Storage]>(zono, x0): build the identity DA state on a
+// Zonotope. State component i (i < M) gets the linear part of the i-th row
+// of the generator matrix, so x_i(ξ) = x0_i + Σ_j G_ij ξ_j — i.e. the
+// identity x = center + G·ξ in factor coordinates. Rows i >= M stay
+// constant at x0_i, exactly as the Box overload.
+template < int P, int M, class Storage = tax::storage::Dense, class T, int D >
+[[nodiscard]] Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D,
+                             1 >
+create( const Zonotope< T, M >& zono, const Eigen::Matrix< T, D, 1 >& x0 )
+{
+    static_assert( D == Eigen::Dynamic || D >= M,
+                   "ads::create(): state dimension D must be >= M (every zonotope factor must "
+                   "map to a state component)." );
+    Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >, D, 1 > out;
+    if constexpr ( D == Eigen::Dynamic ) out.resize( x0.size() );
+    for ( Eigen::Index i = 0; i < x0.size(); ++i )
+    {
+        tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage > comp{};
+        comp[0] = x0( i );
+        if ( i < M )
+        {
+            for ( int j = 0; j < M; ++j )
+            {
+                const T g = zono.generators( static_cast< Eigen::Index >( i ), j );
+                if ( g == T{ 0 } ) continue;
+                tax::MultiIndex< M > alpha{};
+                alpha[static_cast< std::size_t >( j )] = 1;
+                comp[tax::flatIndex< M >( alpha )] = g;
+            }
+        }
+        out( i ) = std::move( comp );
+    }
+    return out;
+}
+
+// split(state, parent_domain, dim): produce the left/right halves.
+// Deduces Storage from the input. The substitution is purely in normalized
+// factor coordinates, so the parent domain (Box or Zonotope) is unused —
+// only the payload polynomial is re-identified here.
+template < class T, int N, int M, class Storage, int D, class Domain >
 [[nodiscard]] std::pair<
     Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >,
     Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 > >
 split( const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
                             1 >& state,
-       const Box< T, M >& /*parent_box*/,  // substitution is in normalized coords
+       const Domain& /*parent_domain*/,  // substitution is in normalized coords
        int dim )
 {
     using State =
