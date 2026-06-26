@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/domains/domain.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
@@ -57,8 +58,9 @@ template < class T, int N, int M, class Storage, int D >
 }
 }  // namespace detail
 
-template < class Payload, int M, class T, class Criterion >
-MergeStats merge( AdsTree< Payload, M, T >& tree, Criterion crit )
+template < class Payload, int M, class T, class Domain, class Criterion >
+    requires LocatableDomain< Domain >
+MergeStats merge( AdsTree< Payload, M, T, Domain >& tree, Criterion crit )
 {
     MergeStats stats{};
 
@@ -80,11 +82,14 @@ MergeStats merge( AdsTree< Payload, M, T >& tree, Criterion crit )
             const int dim = tree.leaf( li ).splitDim;
 
             // Determine which of the pair is left and which is right by
-            // comparing box centers: the child with the lower center along
-            // dim is the left child (shift = +1 for left, -1 for right).
-            const int leftIdx =
-                ( tree.leaf( li ).box.center( dim ) < tree.leaf( sib ).box.center( dim ) ) ? li
-                                                                                           : sib;
+            // comparing splitOrdinate (reduces to center(dim) for a Box;
+            // generalizes to the oriented split position for a Zonotope):
+            // the child with the lower splitOrdinate is the left child
+            // (shift = +1 for left, -1 for right).
+            const int leftIdx = ( tree.leaf( li ).box.splitOrdinate( dim ) <
+                                  tree.leaf( sib ).box.splitOrdinate( dim ) )
+                                    ? li
+                                    : sib;
             const int rightIdx = ( leftIdx == li ) ? sib : li;
 
             // Reconstruct parent by inverting the split substitution
