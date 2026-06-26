@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <tax/ads/box.hpp>
-#include <tax/ads/criteria.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/merge.hpp>
 #include <tax/ads/tree.hpp>

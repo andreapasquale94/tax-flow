@@ -5,7 +5,6 @@
 #pragma once
 
 #include <tax/ads/box.hpp>
-#include <tax/ads/criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/leaf.hpp>
@@ -14,5 +13,6 @@
 #include <tax/ads/refine.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/solution.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>

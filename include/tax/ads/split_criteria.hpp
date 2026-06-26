@@ -1,4 +1,4 @@
-// include/tax/ads/criteria.hpp
+// include/tax/ads/split_criteria.hpp
 //
 // SplitCriterion concept + two implementations.
 //
