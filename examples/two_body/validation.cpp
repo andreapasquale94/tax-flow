@@ -162,7 +162,7 @@ Cell runAdsLike( std::string name, Criterion crit, const BoxT& ic_box,
     std::vector< int > mc_leaf( mc_ic.size(), -1 );
     for ( std::size_t i = 0; i < mc_ic.size(); ++i )
     {
-        const auto idx = tree.leaf( mc_ic[i] );
+        const auto idx = tree.locate( mc_ic[i] );
         if ( idx.has_value() ) mc_leaf[i] = *idx;
     }
 

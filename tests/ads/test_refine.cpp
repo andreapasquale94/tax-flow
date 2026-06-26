@@ -112,7 +112,7 @@ TEST( AdsRefine, VolumeRatioLeavesMatchReference )
 
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );
@@ -143,7 +143,7 @@ TEST( AdsRefine, CoefficientMatchLeavesMatchReference )
 
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );
@@ -224,7 +224,7 @@ TEST( AdsRefine, AggressiveSplitMatchesReference )
     } };
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );

@@ -91,7 +91,7 @@ TEST( AdsDriver, MildlyNonlinearOscillatorMatchesReference )
 
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const auto& leaf = tree.leaf( *idx );
 

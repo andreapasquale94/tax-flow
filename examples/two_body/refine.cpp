@@ -234,7 +234,7 @@ int main( int argc, char** argv )
             int counted = 0;
             for ( const auto& m : monte )
             {
-                auto idx = tree.leaf( m.ic );
+                auto idx = tree.locate( m.ic );
                 if ( !idx.has_value() ) continue;
                 const auto& leaf = tree.leaf( *idx );
                 std::array< double, M > local{};

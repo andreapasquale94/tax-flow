@@ -87,7 +87,7 @@ from `parentIdx` / `siblingIdx`. A split retires the parent in place and
 appends two children; a merge revives the parent. `canonicalizeDone()` sorts
 the finalized leaves by box centre so parallel and serial runs agree and output
 is reproducible. Drivers populate the tree; users normally only read `done()`,
-`leaf(idx)` and `leaf(pt)`.
+`leaf(idx)` and `locate(pt)`.
 
 ---
 

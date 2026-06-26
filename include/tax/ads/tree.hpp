@@ -9,7 +9,7 @@
 // Work queue: std::deque<int> driven in BFS order via popFront. The
 // driver pops a leaf, integrates, and either splits or finalize-s it.
 //
-// Point lookup: leaf(pt) does a linear scan over active+done (skipping
+// Point lookup: locate(pt) does a linear scan over active+done (skipping
 // retired). At ADS-typical sizes (10..1000 leaves) this is faster than
 // a tree walk in practice and avoids the variant-node bookkeeping.
 
@@ -201,7 +201,7 @@ class AdsTree
     }
 
     template < class Derived >
-    [[nodiscard]] std::optional< int > leaf( const Eigen::MatrixBase< Derived >& pt ) const
+    [[nodiscard]] std::optional< int > locate( const Eigen::MatrixBase< Derived >& pt ) const
     {
         for ( int idx : activeList_ )
             if ( leaves_[idx].box.contains( pt ) ) return idx;

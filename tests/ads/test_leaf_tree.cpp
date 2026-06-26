@@ -101,8 +101,8 @@ TEST( AdsTree, LeafLookupSkipsRetired )
     const int L = pr.first;
     const int R = pr.second;
 
-    auto fl = tree.leaf( V2{ -0.5, 0.0 } );
-    auto fr = tree.leaf( V2{ 0.5, 0.0 } );
+    auto fl = tree.locate( V2{ -0.5, 0.0 } );
+    auto fr = tree.locate( V2{ 0.5, 0.0 } );
     ASSERT_TRUE( fl.has_value() );
     ASSERT_TRUE( fr.has_value() );
     EXPECT_EQ( *fl, L );
@@ -113,7 +113,7 @@ TEST( AdsTree, LeafLookupNoneOutside )
 {
     Tree tree;
     (void)tree.init( unitBox(), 7 );
-    auto miss = tree.leaf( V2{ 2.0, 0.0 } );
+    auto miss = tree.locate( V2{ 2.0, 0.0 } );
     EXPECT_FALSE( miss.has_value() );
 }
 
