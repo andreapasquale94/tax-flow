@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/domains/box.hpp>
+#include <tax/ads/domains/domain.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/merge.hpp>

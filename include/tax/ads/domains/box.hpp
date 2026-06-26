@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <tax/ads/domains/domain.hpp>
 #include <tax/la/types.hpp>
 #include <utility>
 
@@ -65,6 +66,13 @@ struct Box
         for ( int i = 0; i < M; ++i ) out( i ) = center( i ) + halfWidth( i ) * d( i );
         return out;
     }
+};
+
+template < class T, int M >
+struct domain_traits< Box< T, M > >
+{
+    using scalar = T;
+    static constexpr int dim = M;
 };
 
 }  // namespace tax::ads

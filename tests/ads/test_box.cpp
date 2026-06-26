@@ -10,6 +10,13 @@
 using tax::ads::Box;
 using V2 = tax::la::VecNT< 2, double >;
 
+// Permanent compile-time guard: Box must model both domain tiers. A concept
+// that silently fails to accept Box would otherwise go unnoticed.
+static_assert( tax::ads::Domain< tax::ads::Box< double, 2 > >,
+               "Box must model the core Domain concept" );
+static_assert( tax::ads::LocatableDomain< tax::ads::Box< double, 2 > >,
+               "Box must model LocatableDomain (exact contains + splitOrdinate)" );
+
 TEST( AdsBox, DefaultCtorZero )
 {
     Box< double, 2 > b{};
