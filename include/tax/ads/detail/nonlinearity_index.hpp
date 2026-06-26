@@ -9,6 +9,9 @@
 //                                v[j] = Σ_{|α|≥2} |coeff(α)| · α_j
 //   nonlinearityIndex(F)      = max_i ||v_i||_1 / linRowBound(F_i)
 //   nliSplitDim(F)            = argmax_j Σ_i v_i[j]
+//   axisMass(f)               = vector m ∈ R^M with
+//                                m[j] = Σ_{|α|=N} |coeff(α)| · α_j
+//   topDegreeMass(f)          = Σ_{|α|=N} |coeff(α)|  (unweighted)
 
 #pragma once
 
@@ -60,6 +63,41 @@ template < class T, int N, int M, class Storage >
         }
     }
     return bound;
+}
+
+// Per-axis degree-N coefficient mass: m[j] = Σ_{|α|=N} |f[α]| · α_j.
+// Graded-lex layout: the degree-N monomials are exactly the contiguous tail
+// block [numMonomials(N-1, M), numMonomials(N, M)). The N>0 guard keeps kLo at 0
+// for a degree-0 expansion (where numMonomials(N-1, M) would underflow).
+template < class T, int N, int M, class Storage >
+[[nodiscard]] std::array< T, M > axisMass(
+    const tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >& f ) noexcept
+{
+    std::array< T, M > mass{};
+    constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
+    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
+    for ( std::size_t k = kLo; k < Ncoef; ++k )
+    {
+        const T a = std::abs( f[k] );
+        if ( a == T{ 0 } ) continue;
+        const auto alpha = tax::unflatIndex< M >( k );
+        for ( int j = 0; j < M; ++j )
+            mass[static_cast< std::size_t >( j )] +=
+                a * T( alpha[static_cast< std::size_t >( j )] );
+    }
+    return mass;
+}
+
+// Unweighted degree-N tail-block mass: Σ_{|α|=N} |f[α]|.
+template < class T, int N, int M, class Storage >
+[[nodiscard]] T topDegreeMass(
+    const tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >& f ) noexcept
+{
+    T s{ 0 };
+    constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
+    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
+    for ( std::size_t k = kLo; k < Ncoef; ++k ) s += std::abs( f[k] );
+    return s;
 }
 
 // LOADS nonlinearity index over a vector of TE rows.

@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <span>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/detail/nonlinearity_index.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <vector>
@@ -72,20 +73,11 @@ template < class T, int N, int M, class Storage, int D >
         f )
 {
     std::array< T, M > totals{};
-    constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
-    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
     for ( Eigen::Index i = 0; i < f.size(); ++i )
     {
-        const auto& row = f( i );
-        for ( std::size_t k = kLo; k < Ncoef; ++k )
-        {
-            const T mag = std::abs( row[k] );
-            if ( mag == T{ 0 } ) continue;
-            const auto alpha = tax::unflatIndex< M >( k );
-            for ( int j = 0; j < M; ++j )
-                totals[static_cast< std::size_t >( j )] +=
-                    mag * T( alpha[static_cast< std::size_t >( j )] );
-        }
+        const auto rowMass = axisMass( f( i ) );
+        for ( int j = 0; j < M; ++j )
+            totals[static_cast< std::size_t >( j )] += rowMass[static_cast< std::size_t >( j )];
     }
     int best = 0;
     T bestVal = totals[0];
@@ -111,20 +103,11 @@ template < class T, int N, int M, class Storage, int D >
     int K )
 {
     std::array< T, M > totals{};
-    constexpr std::size_t kLo = ( N > 0 ) ? tax::numMonomials( N - 1, M ) : 0;
-    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
     for ( Eigen::Index i = 0; i < f.size(); ++i )
     {
-        const auto& row = f( i );
-        for ( std::size_t k = kLo; k < Ncoef; ++k )
-        {
-            const T mag = std::abs( row[k] );
-            if ( mag == T{ 0 } ) continue;
-            const auto alpha = tax::unflatIndex< M >( k );
-            for ( int j = 0; j < M; ++j )
-                totals[static_cast< std::size_t >( j )] +=
-                    mag * T( alpha[static_cast< std::size_t >( j )] );
-        }
+        const auto rowMass = axisMass( f( i ) );
+        for ( int j = 0; j < M; ++j )
+            totals[static_cast< std::size_t >( j )] += rowMass[static_cast< std::size_t >( j )];
     }
     std::array< int, M > order{};
     for ( int j = 0; j < M; ++j ) order[static_cast< std::size_t >( j )] = j;
