@@ -44,7 +44,7 @@ TEST( AdsMerge, CollapsesUnnecessarySplit )
     Tree tree;
     const int root = tree.init( parent, F, /*t=*/0.0 );
     (void)tree.popFront();
-    auto child_states = split( F, parent, /*dim=*/0 );
+    auto child_states = split( F, /*dim=*/0 );
     auto pr = tree.split( root, /*dim=*/0, std::move( child_states.first ),
                           std::move( child_states.second ),
                           /*tEntry=*/0.0 );
@@ -75,7 +75,7 @@ TEST( AdsMerge, RejectsWhenChildrenDoNotMatch )
     Tree tree;
     const int root = tree.init( parent, F, 0.0 );
     (void)tree.popFront();
-    auto cs = split( F, parent, /*dim=*/0 );
+    auto cs = split( F, /*dim=*/0 );
     cs.second( 0 )[0] += 1.0;  // perturb right child's constant
     auto pr = tree.split( root, 0, std::move( cs.first ), std::move( cs.second ), 0.0 );
     (void)tree.popFront();

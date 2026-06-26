@@ -75,7 +75,7 @@ TEST( AdsDaState, SplitRoundTripPreservesValue )
     x0( 1 ) = 0.0;
     State F = create< P, M >( parent, x0 );
 
-    auto pr = split( F, parent, /*dim=*/0 );
+    auto pr = split( F, /*dim=*/0 );
     auto& FL = pr.first;
     auto& FR = pr.second;
 

@@ -59,7 +59,7 @@ Built buildSplitOnce( const std::vector< double >& childGridTimes )
     Tree tree;
     const int root = tree.init( parent, rootState, /*t=*/0.0 );
     (void)tree.popFront();
-    auto cs = split( rootState, parent, /*dim=*/0 );
+    auto cs = split( rootState, /*dim=*/0 );
     DAState c0entry = cs.first;
     DAState c1entry = cs.second;
     auto pr = tree.split( root, /*dim=*/0, std::move( cs.first ), std::move( cs.second ),

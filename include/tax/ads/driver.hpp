@@ -123,7 +123,7 @@ class AdsDriver
             v.split = true;
             v.dim = req.dim;
             v.splitTime = req.t;
-            auto pr = tax::ads::split( sol.x.back(), box, req.dim );
+            auto pr = tax::ads::split( sol.x.back(), req.dim );
             v.left = std::move( pr.first );
             v.right = std::move( pr.second );
         } else

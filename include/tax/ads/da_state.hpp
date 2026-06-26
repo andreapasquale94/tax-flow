@@ -113,7 +113,7 @@ create( const Box< T, M >& box, const Eigen::Matrix< T, D, 1 >& x0 )
     return out;
 }
 
-// split(state, parent_box, dim): produce the left/right halves.
+// split(state, dim): produce the left/right halves.
 // Deduces Storage from the input.
 template < class T, int N, int M, class Storage, int D >
 [[nodiscard]] std::pair<
@@ -121,7 +121,6 @@ template < class T, int N, int M, class Storage, int D >
     Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 > >
 split( const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
                             1 >& state,
-       const Box< T, M >& /*parent_box*/,  // substitution is in normalized coords
        int dim )
 {
     using State =
