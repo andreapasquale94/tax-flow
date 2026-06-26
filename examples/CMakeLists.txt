@@ -26,3 +26,7 @@ tax_add_example(wsb_ads           SOURCES wsb/ads.cpp)
 tax_add_example(reachability      SOURCES reachability/reachability.cpp)
 tax_add_example(missed_thrust     SOURCES missed_thrust/missed_thrust.cpp)
 tax_add_example(missed_thrust_onoff SOURCES missed_thrust_onoff/missed_thrust_onoff.cpp)
+
+# Zonotope tutorial generators
+tax_add_example(zonotope_representations SOURCES zonotope/representations.cpp)
+tax_add_example(zonotope_two_body_mc     SOURCES zonotope/two_body_mc.cpp)
