@@ -66,6 +66,26 @@ initial set (`tests/ads/test_zonotope.cpp`), at the same tolerance:
 | Oriented `Zonotope` | **3** |
 | Its axis-aligned bounding `Box` | 7 |
 
+## Worked example: two-body
+
+`examples/two_body/zonotope.cpp` runs a correlated (45°-rotated) position/
+velocity uncertainty set through one Kepler arc, propagating both the oriented
+`Zonotope` and the axis-aligned box that bounds it. The oriented set needs
+fewer leaves at every snapshot (e.g. **48 vs 75** mid-arc, **116 vs 129** at the
+final time):
+
+```bash
+cmake -S . -B build -DTAXFLOW_BUILD_EXAMPLES=ON && cmake --build build -j
+./build/examples/two_body_zonotope          # writes zonotope.json, zonotope_box.json
+python3 examples/plot/plot_two_body_zonotope.py   # -> two_body_zonotope.png
+```
+
+The advantage is **configuration-dependent**: over most of the orbit the rotated
+factors align with the flow and split less, but the strong shear of the
+periapsis *return* is best resolved by axis-aligned cuts — there the box would
+in turn split less. The example integrates the favourable arc and prints both
+leaf counts at every snapshot so the trade-off is visible, not hidden.
+
 ## Scope and limitations (prototype)
 
 - **Parallelotope only.** `G` is square (`M` generators); there is no support yet

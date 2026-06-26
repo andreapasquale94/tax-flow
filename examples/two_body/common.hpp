@@ -23,6 +23,7 @@
 #include <array>
 #include <cmath>
 #include <tax/ads/box.hpp>
+#include <tax/ads/zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
@@ -93,5 +94,43 @@ inline tax::ads::Box< double, 4 > icBox()
 // The box varies along axes 1 (y) and 3 (vy); the two boundary coordinates
 // map there and the pinned axes get 0.
 inline std::array< double, 4 > boundaryToBox( double a, double b ) { return { 0.0, a, 0.0, b }; }
+
+// ---- Oriented IC set (Zonotope) configuration -------------------------------
+//
+// The same two axes (1 = y, 3 = vy) carry the uncertainty, but now the set is
+// a parallelogram in the (y, vy) plane: a rectangle of half-widths
+// (kIcYHalf, kIcVHalf) rotated by kIcTilt. This models a *correlated* position
+// /velocity error — the kind a covariance ellipse produces — whose principal
+// axes are not aligned with the coordinate axes. x and vx stay pinned (their
+// generator rows are zero). See examples/two_body/zonotope.cpp.
+inline constexpr double kIcYHalf = 0.04;   // half-width along the principal y' axis
+inline constexpr double kIcVHalf = 0.06;   // half-width along the principal vy' axis
+inline const double kIcTilt = M_PI / 4.0;  // rotation of the (y, vy) block [rad]
+
+inline tax::ads::Zonotope< double, 4 > icZonotope()
+{
+    tax::ads::Zonotope< double, 4 > z;
+    z.center = icCenter();
+    z.generators.setZero();
+    const double c = std::cos( kIcTilt );
+    const double s = std::sin( kIcTilt );
+    // 2x2 oriented block R(θ)·diag(kIcYHalf, kIcVHalf) on axes (1 = y, 3 = vy).
+    z.generators( 1, 1 ) = c * kIcYHalf;
+    z.generators( 1, 3 ) = -s * kIcVHalf;
+    z.generators( 3, 1 ) = s * kIcYHalf;
+    z.generators( 3, 3 ) = c * kIcVHalf;
+    return z;
+}
+
+// Axis-aligned Box that tightly bounds icZonotope(): each per-axis half-width
+// is the L1 norm of the corresponding generator row — what you would have to
+// hand the classic box ADS to be sure of covering the same set.
+inline tax::ads::Box< double, 4 > icZonotopeBoundingBox()
+{
+    const auto z = icZonotope();
+    tax::la::VecNT< 4, double > hw;
+    for ( int i = 0; i < 4; ++i ) hw( i ) = z.generators.row( i ).cwiseAbs().sum();
+    return tax::ads::Box< double, 4 >{ z.center, hw };
+}
 
 }  // namespace example::two_body

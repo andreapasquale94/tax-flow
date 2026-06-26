@@ -12,6 +12,7 @@ endfunction()
 
 tax_add_example(two_body_taylor     SOURCES two_body/taylor.cpp)
 tax_add_example(two_body_ads        SOURCES two_body/ads.cpp)
+tax_add_example(two_body_zonotope   SOURCES two_body/zonotope.cpp)
 tax_add_example(two_body_loads      SOURCES two_body/loads.cpp)
 tax_add_example(two_body_refine     SOURCES two_body/refine.cpp)
 tax_add_example(two_body_validation SOURCES two_body/validation.cpp)
