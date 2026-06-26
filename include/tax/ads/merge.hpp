@@ -12,10 +12,8 @@
 
 #pragma once
 
-#include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/multi_index.hpp>

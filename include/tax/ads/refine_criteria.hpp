@@ -41,8 +41,6 @@
 #include <tax/ads/da_state.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
-#include <tax/la/types.hpp>
-#include <utility>
 #include <vector>
 
 namespace tax::ads

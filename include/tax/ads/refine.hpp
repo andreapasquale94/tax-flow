@@ -23,9 +23,10 @@
 //       tax::ads::CoefficientMatchCriterion{ /*tol=*/1e-6, /*maxDepth=*/7 },
 //       rhs, ic_box, ic_center, t0, t1, cfg, n_threads );
 //
-// The result is the same AdsTree<State, M, T> the classic driver returns:
-// tree.done() lists the accepted leaves, each carrying the flow map valid
-// on its sub-box.
+// The result is a bare AdsTree<State, M, T> (not AdsSolution — refine does
+// not capture per-leaf Solutions). tree.done() lists the accepted leaves,
+// each carrying the flow map valid on its sub-box. The classic driver's
+// tax::ads::propagate() returns AdsSolution<Stepper, M> instead.
 
 #pragma once
 
@@ -40,6 +41,7 @@
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
+#include <tax/ode/config.hpp>
 #include <tax/ode/integrator.hpp>
 #include <tax/ode/propagate.hpp>
 #include <thread>
@@ -281,9 +283,10 @@ class RefineDriver
     int split_dirs_ = 1;
 };
 
-// Function-form entry point, mirroring tax::ads::propagate. P is the DA
-// truncation order; M (box dim) and D (state dim) are deduced. The method
-// tag selects the stepper; the quality criterion drives refinement.
+// Function-form entry point. P is the DA truncation order; M (box dim) and
+// D (state dim) are deduced. The method tag selects the stepper; the quality
+// criterion drives refinement. Returns a bare AdsTree<DAState, M, T> — unlike
+// tax::ads::propagate(), which returns AdsSolution<Stepper, M>.
 template < int P, class Method, class Quality, class F, class T, int M, int D >
 [[nodiscard]] auto refine( Method, Quality quality, F&& rhs, const Box< T, M >& ic_box,
                            const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
