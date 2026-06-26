@@ -5,10 +5,10 @@ Usage:
     python3 plot_two_body_poly_zonotope.py [--data DIR] [--out DIR]
 
 Produces two_body_poly_zonotope.png with three panels:
-    (a) the initial set in (x, y): the curved polynomial zonotope vs its tangent
-        (linear) approximation, over the 10000-sample cloud;
-    (b) propagated to T/2 — curved leaves over the cloud (tracks it);
-    (c) propagated to T/2 — linear leaves over the cloud (misses the tails).
+    (a) the initial set in (x, y): the curved polynomial zonotope vs its linear
+        (tangent) approximation, over the 10000-sample cloud;
+    (b) propagated — curved leaves track the cloud;
+    (c) propagated — linear leaves smear far past it (a flat set cannot bend).
 """
 
 import argparse
@@ -74,10 +74,10 @@ def main():
     fig, axes = plt.subplots(1, 3, figsize=(16.5, 5.3), layout="constrained")
     plot_ic(axes[0], d)
     plot_prop(axes[1], d, "leaves_curved", CURVED,
-              f"(b) polynomial zonotope at $T/2$\n{d['n_curved']} leaves, "
+              f"(b) polynomial zonotope\n{d['n_curved']} leaves, "
               f"RMS {d['rms_curved']:.1e}, max {d['max_curved']:.1e}")
     plot_prop(axes[2], d, "leaves_linear", LINEAR,
-              f"(c) linear (tangent) at $T/2$\n{d['n_linear']} leaves, "
+              f"(c) linear (tangent)\n{d['n_linear']} leaves, "
               f"RMS {d['rms_linear']:.1e}, max {d['max_linear']:.1e}")
     fig.suptitle("Curved initial set: polynomial zonotope vs linear approximation (3σ in ν, e)",
                  fontsize=13)

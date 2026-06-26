@@ -109,8 +109,9 @@ returns the map. Each leaf carries its t₀ map (the curved geometry) in additio
 to the propagated payload, so memory per leaf is ~2× the linear case;
 `contains()` uses a first-order inverse and is not on the propagation path. See
 `examples/two_body/poly_zonotope.cpp` for a 3σ orbit-element set where the curved
-representation tracks Monte Carlo to RMS ~8×10⁻⁴ while its linear (tangent)
-approximation smears to ~50% error.
+representation tracks Monte Carlo with 18 leaves (RMS ~2.6×10⁻³) while its linear
+(tangent) parallelotope — flat by construction — smears into 172 leaves at
+RMS ~0.5 (max ~11).
 
 ## Adaptive orientation: aligning the frame to the flow
 

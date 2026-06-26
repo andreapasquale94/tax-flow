@@ -110,38 +110,51 @@ anomaly** \(\nu\) (where along the orbit) and **eccentricity** \(e\) (its shape)
 The element→Cartesian map is nonlinear, so in Cartesian state that uncertainty is
 a **banana**, not an ellipse.
 
-[`tax::ads::PolyZonotope`](../ads/zonotope.md) carries the initial map as a
-*polynomial* of the factors,
-\(\mathbf{x}_0(\boldsymbol{\xi}) = \mathbf{c} + \sum_i (\prod_k \xi_k^{E_{ki}})\,\mathbf{g}_i\),
-instead of the linear \(\mathbf{c} + G\boldsymbol{\xi}\). Because the ADS
-pipeline is generic over the domain, a curved set propagates and subdivides like
-any other — the only new ingredient is that the *t₀* geometry is itself a DA map,
-built with ordinary TE arithmetic (`examples/two_body/poly_zonotope.cpp`).
+**Why not just a linear set?** The image of a box under an *affine* map
+\(\mathbf{c} + G\boldsymbol{\xi}\) is always a **parallelotope** — flat faces,
+straight edges, symmetric about \(\mathbf{c}\). That is all a linear
+representation (a covariance / STM ellipse) can ever be. Expanding the true map
+about the centre, \(\mathbf{x}_0(\boldsymbol{\xi}) = \mathbf{c} + J\boldsymbol{\xi}
++ \tfrac12\boldsymbol{\xi}^\top H\boldsymbol{\xi} + \dots\), the linear set keeps
+only the first-order term and sits on the tangent plane; the real set bends off
+it by the curvature term. At **3σ** the factor \(\boldsymbol{\xi}\sim O(1)\), so
+that curvature is the *same order* as the spread — not a small correction.
 
-We take a **3σ** Gaussian in \((\nu, e)\) and compare the curved polynomial
-zonotope against its **tangent (linear) approximation** — the ellipse a
-covariance / STM gives — propagating both to \(t = T/2\) and validating against
-10000 Monte-Carlo samples drawn from the element-space Gaussian.
+[`tax::ads::PolyZonotope`](../ads/zonotope.md) keeps the polynomial terms,
+\(\mathbf{x}_0(\boldsymbol{\xi}) = \mathbf{c} + \sum_i (\prod_k \xi_k^{E_{ki}})\,\mathbf{g}_i\),
+so it bends to follow the manifold. Because the ADS pipeline is generic over the
+domain, that curved set propagates and subdivides like any other — the only new
+ingredient is that the *t₀* geometry is itself a DA map, built with ordinary TE
+arithmetic (`examples/two_body/poly_zonotope.cpp`).
+
+We take a sizeable **3σ** Gaussian in \((\nu, e)\) — \(\pm21^\circ\) in anomaly,
+\(e \in [0.38, 0.62]\) — and compare the curved polynomial zonotope against its
+**tangent (linear) approximation** — the ellipse a covariance / STM gives —
+propagating both to \(t = 0.75\,T\) and validating against 10000 Monte-Carlo
+samples drawn from the element-space Gaussian.
 
 ![Curved initial set vs linear approximation](img/two_body_poly_zonotope.png)
 
 * **(a)** At \(t_0\) the bend is mild — the polynomial zonotope (blue) and the
   tangent ellipse (red) both roughly bound the cloud.
-* **(b)** Propagated, the curved set tracks the Monte-Carlo cloud tightly with
-  **3 leaves** (RMS \(8\times10^{-4}\)).
-* **(c)** The linear initial set, propagated, **smears far past the cloud** — its
-  wrong \(t_0\) shape is amplified by the flow into a gross over-approximation
-  (RMS \(6\times10^{-2}\), **max \(0.47\)**), and it even costs *more* leaves (25)
-  trying to chase the distortion.
+* **(b)** Propagated, the curved set tracks the Monte-Carlo cloud tightly,
+  tiling the bent arc with **18 leaves** (RMS \(2.6\times10^{-3}\)).
+* **(c)** The linear initial set, propagated, **smears ~10× past the cloud** —
+  its wrong \(t_0\) shape is amplified by the flow into a gross
+  over-approximation (RMS \(0.48\), **max \(11\)**), and it costs **172 leaves**
+  chasing the distortion.
 
 | Initial set | Leaves | RMS error | Max error |
 |-------------|-------:|----------:|----------:|
-| **Polynomial zonotope (curved)** | **3** | **8 × 10⁻⁴** | **3.9 × 10⁻³** |
-| Linear (tangent ellipse) | 25 | 6 × 10⁻² | 4.7 × 10⁻¹ |
+| **Polynomial zonotope (curved)** | **18** | **2.6 × 10⁻³** | **1.2 × 10⁻²** |
+| Linear (tangent ellipse) | 172 | 4.8 × 10⁻¹ | 1.1 × 10¹ |
 
-At 3σ the curvature is not a correction — it is the difference between a right
-answer and a 50%-error one. Representing the initial set as a polynomial zonotope
-gets it right *and* cheaper.
+The curved orbit-manifold set stays compact — 18 leaves wrap the whole bent arc —
+while the linear approximation needs ~10× more leaves *and* is wrong. Push the
+set wider or longer and the tangent set reaches near-collision states that blow
+up entirely; the polynomial zonotope, anchored on valid orbits, does not. At 3σ
+the curvature is not a correction — it is the difference between a right answer
+and a useless one.
 
 ---
 

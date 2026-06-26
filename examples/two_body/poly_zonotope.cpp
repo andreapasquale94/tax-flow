@@ -1,19 +1,25 @@
 // =============================================================================
 // examples/two_body/poly_zonotope.cpp
 //
-// A *curved* initial-condition set propagated as a polynomial zonotope.
+// A *curved* initial-condition set propagated as a polynomial zonotope, and why
+// a linear representation cannot do the same job.
 //
 // The uncertainty is a 3σ Gaussian in two orbital parameters — true anomaly ν
 // (where along the orbit) and eccentricity e (orbit shape). In Cartesian state
-// that uncertainty is not an ellipse but a **bent** set (a banana), because the
-// element→Cartesian map is nonlinear. Expanding that map as a DA gives a
-// genuine polynomial-zonotope initial set, carried as a tax::ads::PolyZonotope
-// domain and propagated through ADS.
+// that uncertainty is a **bent 2-manifold**: every (ν, e) maps to a coupled
+// (x, y, vx, vy) on a valid orbit. The element→Cartesian map is nonlinear, so
+// the set is a banana, not a parallelotope.
 //
-// We compare against the **linear** picture — the tangent ellipse (first-order
-// element→Cartesian map) propagated the same way — and validate both against
-// 10000 Monte-Carlo samples drawn from the element-space Gaussian. The curved
-// polynomial zonotope tracks the cloud; the linear ellipse misses the tails.
+//   * PolyZonotope (curved): bake the full element→Cartesian map (degree ≥ 2)
+//     into the initial DA state, so ADS starts from the true curved set.
+//   * Linear (tangent): keep only the first-order map c + J·ξ — the parallelotope
+//     a covariance / STM gives. An affine image of a box is always flat, so it
+//     agrees with the curved set only to first order at the centre; at 3σ the
+//     curvature it drops is the same order as the spread itself.
+//
+// Both are propagated to 0.75 T and validated against 10000 Monte-Carlo samples
+// drawn from the element-space Gaussian. The curved set tracks the cloud; the
+// linear one sits on the tangent and is amplified by the flow into a smear.
 //
 // Run:    ./two_body_poly_zonotope
 // Writes: poly_zonotope.json   (plot with plot_two_body_poly_zonotope.py)
@@ -44,9 +50,10 @@ using Vec4 = tax::la::VecNT< 4, double >;
 using V2 = tax::la::VecNT< 2, double >;
 using PZ = tax::ads::PolyZonotope< double, P, M, tax::storage::Dense, D >;
 
-// 3σ half-widths of the (ν, e) Gaussian — ξ = ±1 maps to ±3σ.
-constexpr double kSigNu = 0.05;        // 1σ true anomaly [rad]
-constexpr double kSigE = 0.03;         // 1σ eccentricity
+// 3σ half-widths of the (ν, e) Gaussian — ξ = ±1 maps to ±3σ. A sizeable set
+// (≈ ±21° in anomaly, e ∈ [0.38, 0.62]) so ADS makes a real tiling.
+constexpr double kSigNu = 0.12;        // 1σ true anomaly [rad]
+constexpr double kSigE = 0.04;         // 1σ eccentricity
 constexpr double kE0 = kEcc;           // nominal e = 0.5
 constexpr double kNu3 = 3.0 * kSigNu;  // box half-width in ν
 constexpr double kE3 = 3.0 * kSigE;    // box half-width in e
@@ -80,7 +87,9 @@ DAState curvedMap()
     return m;
 }
 
-// Degree-1 (tangent) approximation of a curved map: keep centre + Jacobian·ξ.
+// Degree-1 (tangent) part of a curved map: centre + Jacobian·ξ. An affine image
+// of the box — the best linear / covariance representation, and a parallelotope
+// (flat) by construction, so it cannot bend with the true set.
 DAState linearize( const PZ& z )
 {
     const auto J = z.jacobian();  // D×M
@@ -102,9 +111,20 @@ DAState linearize( const PZ& z )
 
 // (x, y) boundary image of a map over the unit-square factor boundary.
 std::array< double, 2 > toBox2( double a, double b ) { return { a, b }; }
+Polygon mapBoundary( const DAState& m, const std::vector< std::array< double, 2 > >& bnd )
+{
+    Polygon p;
+    for ( const auto& ab : bnd )
+    {
+        const V2 d{ ab[0], ab[1] };
+        p.x.push_back( m( 0 ).eval( d ) );
+        p.y.push_back( m( 1 ).eval( d ) );
+    }
+    return p;
+}
 
-// Best-fit leaf lookup + flow-map evaluation for a physical IC, returning the
-// predicted (x, y). Uses each leaf's linear inverse (leaves are small).
+// Best-fit leaf lookup + flow-map evaluation for a physical IC → predicted
+// (x, y). Each leaf's curved map is inverted to first order (leaves are small).
 template < class Tree >
 V2 predictXY( const Tree& tree, const Vec4& ic )
 {
@@ -124,23 +144,11 @@ V2 predictXY( const Tree& tree, const Vec4& ic )
     }
     return out;
 }
-
-Polygon mapBoundary( const DAState& m, const std::vector< std::array< double, 2 > >& bnd )
-{
-    Polygon p;
-    for ( const auto& ab : bnd )
-    {
-        const V2 d{ ab[0], ab[1] };
-        p.x.push_back( m( 0 ).eval( d ) );
-        p.y.push_back( m( 1 ).eval( d ) );
-    }
-    return p;
-}
 }  // namespace
 
 int main()
 {
-    const double t_final = 0.5 * kPeriod;
+    const double t_final = 0.75 * kPeriod;
     const auto boundary = unitSquareBoundary( 48 );
 
     tax::ode::IntegratorConfig< double > cfg;
@@ -150,7 +158,7 @@ int main()
     const PZ pz_curved = PZ::fromMap( curvedMap() );
     const PZ pz_linear = PZ::fromMap( linearize( pz_curved ) );
 
-    // Initial sets in (x, y): the bent polynomial zonotope vs its tangent.
+    // Initial sets in (x, y): the bent polynomial zonotope vs its flat tangent.
     const Polygon ic_curved = mapBoundary( pz_curved.map, boundary );
     const Polygon ic_linear = mapBoundary( pz_linear.map, boundary );
 
@@ -260,7 +268,7 @@ int main()
     writeJsonArray( out, reference.cols[1] );
     out << " }\n}\n";
 
-    printBanner( "two_body/poly_zonotope — curved initial set (orbit-element Gaussian)",
+    printBanner( "two_body/poly_zonotope — curved set vs linear (tangent)",
                  { { "factors", "true anomaly nu, eccentricity e" },
                    { "3-sigma (nu,e)", std::to_string( kNu3 ) + ", " + std::to_string( kE3 ) },
                    { "leaves", std::to_string( tree_curved.done().size() ) + " (curved) vs " +
