@@ -216,11 +216,11 @@ For full control (user events, reused configuration) instantiate the driver
 classes the convenience functions wrap:
 
 ```cpp
-template <class Stepper, class Criterion> class AdsDriver;      // propagate
-template <class Stepper, class Quality>   class RefineDriver;   // refine
+template <class Stepper, class Criterion> class AdsDriver;         // propagate
+template <class Stepper, class Quality>   class AdsRefineDriver;   // refine
 
 AdsDriver(Criterion, Cfg, ExtraEvt extras = {}, int num_threads = 1);
-RefineDriver(Quality, Cfg, int num_threads = 1, int split_dirs = 1);
+AdsRefineDriver(Quality, Cfg, int num_threads = 1, int split_dirs = 1);
 
 Tree run(F&& rhs, const BoxT& ic_box, const Eigen::Matrix<T, D, 1>& ic_center, T t0, T t1);
 ```

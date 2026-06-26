@@ -145,6 +145,12 @@ Architecture: leaf-only arena tree (`AdsTree`); ADS interops with `tax::ode`
 events via `(SplitTrigger, SplitAction)`; splits happen at accepted-step
 boundaries only; the parallel `AdsDriver` runs `num_threads` jthread workers.
 
+**Naming convention:** Top-level orchestration/result types carry the `Ads`
+prefix — `AdsTree`, `AdsDriver`, `AdsSolution`, `AdsRefineDriver` — because
+their bare names are generic (and `Solution` would clash with
+`tax::ode::Solution`). Leaf/value/criteria types (`Box`, `Leaf`, `SplitEvent`,
+`MergeStats`, the `*Criterion` structs) rely on the `tax::ads` namespace instead.
+
 ---
 
 ## Code Conventions

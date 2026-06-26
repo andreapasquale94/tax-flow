@@ -1,6 +1,6 @@
 // include/tax/ads/refine.hpp
 //
-// RefineDriver / refine — a "propagate-then-assess" alternative to the
+// AdsRefineDriver / refine — a "propagate-then-assess" alternative to the
 // classic in-flight ADS driver.
 //
 // The classic AdsDriver splits a box the moment a flow map stops
@@ -53,7 +53,7 @@ namespace tax::ads
 {
 
 template < class Stepper, class Quality >
-class RefineDriver
+class AdsRefineDriver
 {
    public:
     using State = typename Stepper::State;
@@ -76,7 +76,7 @@ class RefineDriver
     // split_dirs > 1 turns on aggressive multi-way refinement: a box that
     // fails the quality test is split along its top-`split_dirs` directions
     // at once, into 2^split_dirs children, instead of bisecting one axis.
-    RefineDriver( Quality quality, Cfg cfg, int num_threads = 1, int split_dirs = 1 )
+    AdsRefineDriver( Quality quality, Cfg cfg, int num_threads = 1, int split_dirs = 1 )
         : quality_( std::move( quality ) ),
           cfg_( std::move( cfg ) ),
           num_threads_( num_threads < 1 ? 1 : num_threads ),
@@ -297,8 +297,8 @@ template < int P, class Method, class Quality, class F, class T, int M, int D >
     using DAState = Eigen::Matrix< TE, D, 1 >;
     using Stepper = tax::ode::StepperType< Method, DAState >;
 
-    RefineDriver< Stepper, Quality > driver{ std::move( quality ), std::move( cfg ), num_threads,
-                                             split_dirs };
+    AdsRefineDriver< Stepper, Quality > driver{ std::move( quality ), std::move( cfg ), num_threads,
+                                                split_dirs };
     return driver.run( std::forward< F >( rhs ), ic_box, ic_center, t0, t1 );
 }
 

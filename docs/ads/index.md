@@ -112,5 +112,5 @@ dimension.
 | `tax/ads/driver.hpp` | `AdsDriver<Stepper, Criterion>` |
 | `tax/ads/propagate.hpp` | `propagate<P>(method, criterion, …)` |
 | `tax/ads/refine_criteria.hpp` | `QualityCriterion`, `CoefficientMatchCriterion`, `VolumeRatioCriterion` |
-| `tax/ads/refine.hpp` | `RefineDriver<Stepper, Quality>`, `refine<P>(method, quality, …)` |
+| `tax/ads/refine.hpp` | `AdsRefineDriver<Stepper, Quality>`, `refine<P>(method, quality, …)` |
 | `tax/ads/merge.hpp` | `merge(tree, criterion)`, `MergeStats` |
