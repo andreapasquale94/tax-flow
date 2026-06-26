@@ -20,6 +20,7 @@
 
 #include <tax/ads/box.hpp>
 #include <tax/ads/driver.hpp>
+#include <tax/ads/poly_zonotope.hpp>
 #include <tax/ads/zonotope.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/la/types.hpp>
@@ -64,6 +65,24 @@ template < int P, class Method, class Criterion, class F, class T, int M, int D 
     AdsDriver< Stepper, Criterion, Zonotope< T, M > > driver{
         std::move( crit ), std::move( cfg ), {}, num_threads };
     return driver.run( std::forward< F >( rhs ), ic_zono, ic_center, t0, t1 );
+}
+
+// PolyZonotope (curved initial set) overload: the leaves carry a polynomial
+// initial-condition map, so the propagated tree describes the image of a bent
+// set. Same contract as the other propagate overloads.
+template < int P, class Method, class Criterion, class F, class T, int M, class Storage, int D >
+[[nodiscard]] auto propagate( Method, Criterion crit, F&& rhs,
+                              const PolyZonotope< T, P, M, Storage, D >& ic_pz,
+                              const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
+                              tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1 )
+{
+    using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, Storage >;
+    using DAState = Eigen::Matrix< TE, D, 1 >;
+    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+
+    AdsDriver< Stepper, Criterion, PolyZonotope< T, P, M, Storage, D > > driver{
+        std::move( crit ), std::move( cfg ), {}, num_threads };
+    return driver.run( std::forward< F >( rhs ), ic_pz, ic_center, t0, t1 );
 }
 
 }  // namespace tax::ads

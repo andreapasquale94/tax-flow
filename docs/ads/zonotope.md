@@ -86,6 +86,32 @@ periapsis *return* is best resolved by axis-aligned cuts — there the box would
 in turn split less. The example integrates the favourable arc and prints both
 leaf counts at every snapshot so the trade-off is visible, not hidden.
 
+## Curved initial sets: `PolyZonotope`
+
+`Box` and `Zonotope` map the factor box to the initial state *linearly*
+(`center + G·ξ`). `tax::ads::PolyZonotope<T, N, M, Storage, D>` instead carries
+the initial map as a **polynomial** of the factors — a degree-≥2 DA state — so
+the initial set can be genuinely **curved** (a banana), the shape you get when a
+Gaussian in orbital elements or a phase angle is expressed in Cartesian state.
+
+```cpp
+// build the curved t0 map with ordinary TE arithmetic, then wrap it
+auto x0 = /* DA state: Cartesian(ξ) for a Gaussian in (true anomaly, e) */;
+auto ic = tax::ads::PolyZonotope<double, 8, 2, tax::storage::Dense, 4>::fromMap(x0);
+auto tree = tax::ads::propagate</*P=*/8>(Verner89{}, crit, rhs, ic, ic_center, t0, t1, cfg);
+```
+
+A `PolyZonotope` satisfies the same domain interface as `Zonotope`
+(`center` / `split` / `contains` / `denormalize` / `splitOrdinate`), so it plugs
+into the existing generic ADS pipeline unchanged — splitting re-expands the
+curved map with the same `substituteAxis` as the payload, and `create()` simply
+returns the map. Each leaf carries its t₀ map (the curved geometry) in addition
+to the propagated payload, so memory per leaf is ~2× the linear case;
+`contains()` uses a first-order inverse and is not on the propagation path. See
+`examples/two_body/poly_zonotope.cpp` for a 3σ orbit-element set where the curved
+representation tracks Monte Carlo to RMS ~8×10⁻⁴ while its linear (tangent)
+approximation smears to ~50% error.
+
 ## Adaptive orientation: aligning the frame to the flow
 
 A *fixed* orientation is arbitrary — the two-body example above wins over most

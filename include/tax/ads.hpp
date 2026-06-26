@@ -5,13 +5,13 @@
 #pragma once
 
 #include <tax/ads/box.hpp>
-#include <tax/ads/cpz.hpp>
 #include <tax/ads/criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/merge.hpp>
 #include <tax/ads/nonlinearity_index.hpp>
+#include <tax/ads/poly_zonotope.hpp>
 #include <tax/ads/propagate.hpp>
 #include <tax/ads/refine.hpp>
 #include <tax/ads/reorient.hpp>

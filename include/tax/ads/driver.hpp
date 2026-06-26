@@ -72,7 +72,9 @@ class AdsDriver
                             T t0, T t1 )
     {
         Tree tree;
-        State root_state = tax::ads::create< N, M >( ic_box, ic_center );
+        // Unqualified so ADL finds the domain's create() overload (Box /
+        // Zonotope in da_state.hpp, PolyZonotope in poly_zonotope.hpp, ...).
+        State root_state = create< N, M >( ic_box, ic_center );
         (void)tree.init( ic_box, std::move( root_state ), t0 );
 
         if ( num_threads_ > 1 )

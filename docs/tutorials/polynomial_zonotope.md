@@ -12,10 +12,11 @@ on a simple domain, then validate everything on the two-body problem against
 **10000 Monte-Carlo samples**.
 
 Source: [`examples/zonotope/`](https://github.com/andreapasquale94/tax/tree/main/examples/zonotope)
-(`representations.cpp`, `two_body_mc.cpp`),
-[`examples/two_body/zonotope.cpp`](https://github.com/andreapasquale94/tax/tree/main/examples/two_body/zonotope.cpp),
-[`examples/two_body/zonotope_adaptive.cpp`](https://github.com/andreapasquale94/tax/tree/main/examples/two_body/zonotope_adaptive.cpp),
-and the [`tax::ads::Zonotope`](../ads/zonotope.md) module.
+(`representations.cpp`, `two_body_mc.cpp`) and
+[`examples/two_body/`](https://github.com/andreapasquale94/tax/tree/main/examples/two_body)
+(`poly_zonotope.cpp`, `zonotope.cpp`, `zonotope_adaptive.cpp`), with the
+[`tax::ads::PolyZonotope`](../ads/zonotope.md) and
+[`tax::ads::Zonotope`](../ads/zonotope.md) modules.
 
 ---
 
@@ -56,8 +57,9 @@ curvature a linear zonotope cannot.
 
 **Constrained (polynomial) zonotope.** Add equality constraints on the factors,
 \(A\boldsymbol{\xi} = \mathbf{b}\) (Scott et al. 2016; Kochdumper & Althoff
-2020). Constraints let a zonotope represent *any* convex polytope and let you
-split a domain by *adding a half-space* instead of bisecting.
+2020). Constraints let a zonotope represent *any* convex polytope and carve out
+lower-dimensional sub-manifolds — useful for level sets and event preimages, but
+not implemented in this prototype.
 
 ### What `tax-flow` actually stores
 
@@ -67,16 +69,13 @@ gives that leaf an **oriented (parallelotope) factor box** instead of an
 axis-aligned one. ADS subdivision turns the whole tree into a **piecewise
 polynomial zonotope**: a union of leaves that tile the propagated set.
 
-Two further ingredients are prototyped:
+Two things lift it past the plain box:
 
+* **A curved initial set** — [`tax::ads::PolyZonotope`](#curved-initial-sets-the-polynomial-zonotope-domain)
+  makes the *initial* map itself a polynomial (degree ≥ 2), so a bent uncertainty
+  is described exactly at \(t_0\), not just after the flow bends it.
 * **Orientation** — [`tax::ads::Zonotope`](../ads/zonotope.md) makes the factor
-  box oriented; choosing that orientation from the flow (below) needs the fewest
-  leaves.
-* **Polynomial equality constraints** \(g_j(\boldsymbol{\xi}) = 0\) —
-  [`tax::ads::cpz`](#constrained-polynomial-zonotopes) carries one or more
-  constraint polynomials alongside the value map, giving the genuine
-  **constrained polynomial zonotope** and the *split-by-constraint* pruning that
-  collapses a box onto a lower-dimensional set.
+  box oriented; choosing that orientation from the flow needs the fewest leaves.
 
 ### On a simple domain
 
@@ -98,6 +97,51 @@ cloud as ground truth.
   piece's linear image — the pieces converge onto the curved set. This is the
   essence of ADS: many low-order pieces describe a curved set that one piece
   cannot.
+
+---
+
+## Curved initial sets: the polynomial-zonotope domain
+
+The most direct use of a polynomial zonotope is to describe an initial set that
+is **already bent** — before any propagation. This happens whenever the
+uncertainty is Gaussian in one coordinate system but expressed in another. A
+classic astrodynamics case: the orbit is known up to a Gaussian in **true
+anomaly** \(\nu\) (where along the orbit) and **eccentricity** \(e\) (its shape).
+The element→Cartesian map is nonlinear, so in Cartesian state that uncertainty is
+a **banana**, not an ellipse.
+
+[`tax::ads::PolyZonotope`](../ads/zonotope.md) carries the initial map as a
+*polynomial* of the factors,
+\(\mathbf{x}_0(\boldsymbol{\xi}) = \mathbf{c} + \sum_i (\prod_k \xi_k^{E_{ki}})\,\mathbf{g}_i\),
+instead of the linear \(\mathbf{c} + G\boldsymbol{\xi}\). Because the ADS
+pipeline is generic over the domain, a curved set propagates and subdivides like
+any other — the only new ingredient is that the *t₀* geometry is itself a DA map,
+built with ordinary TE arithmetic (`examples/two_body/poly_zonotope.cpp`).
+
+We take a **3σ** Gaussian in \((\nu, e)\) and compare the curved polynomial
+zonotope against its **tangent (linear) approximation** — the ellipse a
+covariance / STM gives — propagating both to \(t = T/2\) and validating against
+10000 Monte-Carlo samples drawn from the element-space Gaussian.
+
+![Curved initial set vs linear approximation](img/two_body_poly_zonotope.png)
+
+* **(a)** At \(t_0\) the bend is mild — the polynomial zonotope (blue) and the
+  tangent ellipse (red) both roughly bound the cloud.
+* **(b)** Propagated, the curved set tracks the Monte-Carlo cloud tightly with
+  **3 leaves** (RMS \(8\times10^{-4}\)).
+* **(c)** The linear initial set, propagated, **smears far past the cloud** — its
+  wrong \(t_0\) shape is amplified by the flow into a gross over-approximation
+  (RMS \(6\times10^{-2}\), **max \(0.47\)**), and it even costs *more* leaves (25)
+  trying to chase the distortion.
+
+| Initial set | Leaves | RMS error | Max error |
+|-------------|-------:|----------:|----------:|
+| **Polynomial zonotope (curved)** | **3** | **8 × 10⁻⁴** | **3.9 × 10⁻³** |
+| Linear (tangent ellipse) | 25 | 6 × 10⁻² | 4.7 × 10⁻¹ |
+
+At 3σ the curvature is not a correction — it is the difference between a right
+answer and a 50%-error one. Representing the initial set as a polynomial zonotope
+gets it right *and* cheaper.
 
 ---
 
@@ -184,64 +228,6 @@ leaf polynomial zonotopes do not merely *bound* the propagated set — they
 
 ---
 
-## Constrained polynomial zonotopes
-
-Everything above describes an *unconstrained* set — the factors range over the
-whole box. A **constrained polynomial zonotope** ([`tax::ads::cpz`](https://github.com/andreapasquale94/tax/tree/main/include/tax/ads/cpz.hpp))
-adds polynomial equality constraints on those factors:
-
-$$
-\big\{\, \mathbf{x}(\boldsymbol{\xi}) \;:\; \boldsymbol{\xi} \in [-1,1]^M,\; g_j(\boldsymbol{\xi}) = 0 \big\}.
-$$
-
-The constraints carve a **lower-dimensional sub-manifold** out of the box. A
-natural astrodynamics case: the initial state is uncertain in \((y, v_y)\), but
-the spacecraft is known to be on an orbit of fixed **energy** (fixed
-semi-major axis). The valid ICs are then the curve
-\(\{(y, v_y) \in \text{box} : E(y, v_y) = E_0\}\), with
-\(E = \tfrac12 v^2 - 1/r\). Expanding the energy as a DA gives a *polynomial*
-constraint \(g(\boldsymbol{\xi}) = E(\boldsymbol{\xi}) - E_0\) — exactly a CPZ
-(`examples/two_body/cpz.cpp`).
-
-Because the constraint is a polynomial in the same factors, it **splits like the
-value map** (the same `substituteAxis` re-expansion), and it gives a cheap
-emptiness test: over \(\boldsymbol{\xi} \in [-1,1]^M\) the constraint ranges
-within \([g_0 - r,\, g_0 + r]\) with \(r = \sum_{\alpha\neq 0} |g_\alpha|\). If
-\(0\) is outside that interval the sub-box **cannot** satisfy \(g=0\) and the
-leaf is pruned. Subdivide, prune the infeasible children, and only the band
-straddling the constraint survives.
-
-![Constrained polynomial zonotope: fixed-energy set](img/two_body_cpz.png)
-
-* **(a)** The fixed-energy curve through the \((y, v_y)\) box, and the feasible
-  band of sub-boxes that survives pruning — a thin sleeve around the curve, not
-  the whole box.
-* **(b)** **Dimensional collapse.** As the box is subdivided, the unpruned cell
-  count grows like the *area* (\(2^{\text{depth}}\)); the feasible count grows
-  only like the *length* (\(\approx 2^{\text{depth}/2}\)). At depth 16 that is
-  **384 feasible** cells out of 65536.
-* **(c)** Propagated to \(t = T/2\): the unconstrained box needs a **2-D ADS
-  tiling of 61 leaves**, but the constrained set is the **1-D curve carried by
-  just 12 leaves**. The red curve runs through the blue blob along where the
-  fixed-energy ICs actually land.
-
-Validated against **10000 Monte-Carlo samples drawn on the true energy curve**
-(propagated independently), the constrained leaves reproduce the cloud to
-RMS \(\approx 1.2\times10^{-5}\) (max \(6.3\times10^{-5}\)) — larger than the
-earlier cases because this box is ~5× wider, still at the \(10^{-6}\) split
-tolerance.
-
-| Representation | Leaves | Dimension |
-|----------------|-------:|:---------:|
-| Unconstrained box (2-D ADS) | 61 | 2 |
-| **Fixed-energy CPZ** | **12** | 1 |
-
-This is the **split-by-constraint** lever: the constraint does not just describe
-the set, it *prunes the work*, collapsing a 2-D box onto its 1-D constrained
-slice.
-
----
-
 ## Reproduce it
 
 ```bash
@@ -251,6 +237,10 @@ cmake --build build -j
 # simple-domain representations
 ./build/examples/zonotope_representations
 python3 examples/plot/plot_representations.py
+
+# curved initial set (polynomial zonotope vs linear)
+./build/examples/two_body_poly_zonotope
+python3 examples/plot/plot_two_body_poly_zonotope.py
 
 # oriented domains on two-body + leaf-count curves
 ./build/examples/two_body_zonotope
@@ -263,10 +253,6 @@ python3 examples/plot/plot_two_body_zonotope_adaptive.py
 # 10000-sample Monte-Carlo validation (both scenarios)
 ./build/examples/zonotope_two_body_mc
 python3 examples/plot/plot_two_body_mc.py
-
-# constrained polynomial zonotope (fixed-energy set)
-./build/examples/two_body_cpz
-python3 examples/plot/plot_two_body_cpz.py
 ```
 
 ---
@@ -276,14 +262,13 @@ python3 examples/plot/plot_two_body_cpz.py
 This is a prototype of the oriented / polynomial-zonotope path; the honest
 boundaries:
 
-* **Parallelotope generators are square** (no redundant generators), so
-  arbitrary-polytope coverage is still future work.
-* **Constraints are prototyped but not wired into the driver.** `tax::ads::cpz`
-  carries and splits polynomial constraints and prunes infeasible leaves, but
-  the demonstration prunes a separate subdivision / filters an ordinary ADS run
-  rather than pruning *inside* `AdsDriver` in flight. Constraint feasibility uses
-  the first-order interval bound (\(L_1\) of the coefficients), which is sound
-  but not the tightest possible test.
+* **Parallelotope generators are square** (no redundant generators), and there
+  are no factor **constraints** \(g_j(\boldsymbol{\xi})=0\), so arbitrary-polytope
+  coverage and constrained sub-manifolds (level sets, event preimages) are future
+  work.
+* **The curved domain carries its t₀ map per leaf** (in addition to the
+  propagated payload), so a `PolyZonotope` leaf uses ~2× the memory of a linear
+  one, and point-location (`contains`) uses a first-order inverse.
 * **Orientation is chosen once, up front.** The flow-aligned frame comes from a
   single probe STM over the whole horizon. `reorientState` is the building block
   for *time-adaptive* re-orientation, but re-orienting mid-flight needs an
