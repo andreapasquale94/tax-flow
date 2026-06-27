@@ -12,11 +12,13 @@
 
 #include <cmath>
 #include <cstddef>
+#include <tax/ads.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/domains/box.hpp>
 #include <tax/ads/domains/polynomial_zonotope.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/la/types.hpp>
+#include <tax/ode.hpp>
 
 // Permanent compile-time guards (the tier gate):
 //   PolynomialZonotope MUST model Domain but MUST NOT model LocatableDomain.
@@ -152,5 +154,66 @@ TEST( PolynomialZonotope, CreateMatchesBoxSeed )
         EXPECT_DOUBLE_EQ( sPz( i )[tax::flatIndex< M >( e )], b.halfWidth( i ) );
         // Whole expansion matches the Box seed coefficient by coefficient.
         for ( std::size_t k = 0; k < Ncoef; ++k ) EXPECT_DOUBLE_EQ( sPz( i )[k], sBox( i )[k] );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 6. propagate<P> over a PolynomialZonotope IC compiles and runs end-to-end.
+//
+// This is the key coverage gap: none of the existing tests exercise the full
+// propagate(polyZono, ...) → AdsDriver → AdsTree pipeline.  A 2D harmonic
+// oscillator (dx/dt = v, dv/dt = -x) is used as the simplest non-trivial rhs;
+// the IC set is a box-equivalent PolynomialZonotope with an optional tiny ξ₀²
+// curvature.  Single-threaded (num_threads=1) to avoid the parallel-driver
+// SIGBUS on large DA states.  No merge() call — PolynomialZonotope does not
+// model LocatableDomain, so merge would not compile.
+// ---------------------------------------------------------------------------
+TEST( PolynomialZonotope, PropagateRuns )
+{
+    using namespace tax::ode::methods;
+
+    // 2D harmonic oscillator: solution is (cos t, -sin t) from (1, 0).
+    auto rhs = []( const auto& s, const auto& /*t*/ ) {
+        using S = std::decay_t< decltype( s ) >;
+        S out;
+        out( 0 ) = s( 1 );   // dx/dt = v
+        out( 1 ) = -s( 0 );  // dv/dt = -x
+        return out;
+    };
+
+    constexpr int P = 6;
+    constexpr int kM = 2;
+    constexpr int D = 2;
+
+    // Small box IC turned into a polynomial zonotope (degree-1 = linear generators).
+    tax::ads::Box< double, kM > ic_box{ { 1.0, 0.0 }, { 0.05, 0.02 } };
+    auto pz = tax::ads::PolynomialZonotope< double, P, kM >::fromBox( ic_box );
+    // Add a tiny ξ₀² curvature to value[0] (x-component) to make it genuinely
+    // polynomial rather than just a linear / zonotope-equivalent set.
+    {
+        tax::MultiIndex< kM > a{};
+        a[0] = 2;
+        pz.value[0][tax::flatIndex< kM >( a )] = 0.1 * ic_box.halfWidth( 0 );  // 0.005
+    }
+
+    tax::la::VecNT< D, double > center{ 1.0, 0.0 };
+
+    tax::ode::IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-10;
+
+    const tax::ads::TruncationCriterion criterion{ /*tol=*/1e-4, /*maxDepth=*/6 };
+
+    auto sol = tax::ads::propagate< P >( Verner89{}, criterion, rhs, pz, center, 0.0, M_PI / 2.0,
+                                         cfg, /*num_threads=*/1 );
+
+    // The propagation must produce at least one accepted leaf in the done set.
+    ASSERT_GE( sol.tree().done().size(), 1u );
+
+    // Every leaf's flow-map constant term (the image of the center) must be finite.
+    for ( int li : sol.tree().done() )
+    {
+        const auto& payload = sol.tree().leaf( li ).payload;
+        EXPECT_TRUE( std::isfinite( payload( 0 )[0] ) );
+        EXPECT_TRUE( std::isfinite( payload( 1 )[0] ) );
     }
 }

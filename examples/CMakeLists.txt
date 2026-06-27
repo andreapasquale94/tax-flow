@@ -17,6 +17,7 @@ tax_add_example(two_body_zonotope_adaptive SOURCES two_body/zonotope_adaptive.cp
 tax_add_example(two_body_loads      SOURCES two_body/loads.cpp)
 tax_add_example(two_body_refine     SOURCES two_body/refine.cpp)
 tax_add_example(two_body_validation SOURCES two_body/validation.cpp)
+tax_add_example(two_body_polynomial_zonotope SOURCES two_body/polynomial_zonotope.cpp)
 tax_add_example(three_body_taylor SOURCES three_body/taylor.cpp)
 tax_add_example(three_body_ads    SOURCES three_body/ads.cpp)
 tax_add_example(three_body_loads  SOURCES three_body/loads.cpp)
