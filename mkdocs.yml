@@ -125,3 +125,5 @@ nav:
       - Overview: ads/index.md
       - API Reference: ads/api.md
       - Refinement: ads/refine.md
+      - Zonotope domain: ads/zonotope.md
+      - Polynomial Zonotope domain: ads/polynomial_zonotope.md

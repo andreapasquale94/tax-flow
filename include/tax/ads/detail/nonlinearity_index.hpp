@@ -1,4 +1,4 @@
-// include/tax/ads/nonlinearity_index.hpp
+// include/tax/ads/detail/nonlinearity_index.hpp
 //
 // LOADS nonlinearity-index math. All helpers live in tax::ads::detail
 // and operate on TaylorExpansion<T, N, M, Storage> over the normalized

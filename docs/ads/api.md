@@ -15,6 +15,34 @@ state dimension, **`P`** the Taylor truncation order, and the per-leaf
 
 ---
 
+## Domain interface
+
+```cpp
+// include/tax/ads/domains/domain.hpp
+template <class D>
+struct domain_traits;          // specialised by each primitive
+
+template <class D>
+concept Domain = requires(const D d, int dim) {
+    typename domain_traits<D>::scalar;
+    { domain_traits<D>::dim } -> std::convertible_to<int>;
+    { d.center(0) };
+    { d.split(dim) } -> std::same_as<std::pair<D, D>>;
+};
+
+template <class D>
+concept LocatableDomain = Domain<D> && requires(const D d, int dim) {
+    { d.splitOrdinate(dim) } -> std::convertible_to<domain_scalar_t<D>>;
+};
+```
+
+`Domain` is the minimum requirement for `propagate` and `AdsDriver`.
+`LocatableDomain` additionally requires `splitOrdinate` (exact affine sibling
+ordering) and is required by `merge`. `PolynomialZonotope` models `Domain` but
+not `LocatableDomain`; `Box` and `Zonotope` model both.
+
+---
+
 ## Box
 
 ```cpp
@@ -25,6 +53,7 @@ struct Box {
 
     bool contains(const Eigen::MatrixBase<Derived>& pt) const noexcept;
     std::pair<Box, Box> split(int dim) const noexcept;            // halve along dim
+    T splitOrdinate(int dim) const noexcept;                      // center(dim)
     tax::la::VecNT<M, T> denormalize(const Eigen::MatrixBase<Derived>& d) const noexcept;
 };
 ```
@@ -40,13 +69,84 @@ Box<double, 4> b{ {0.5, 0, 0, 1.7}, {0, 1e-3, 0, 1e-3} };   // varies axes 1 and
 
 ---
 
+## Zonotope
+
+```cpp
+// include/tax/ads/domains/zonotope.hpp
+template <class T, int M>
+struct Zonotope {
+    tax::la::VecNT<M, T>  center     = tax::la::VecNT<M, T>::Zero();
+    tax::la::MatNT<M, T>  generators = tax::la::MatNT<M, T>::Zero();   // M×M
+
+    static Zonotope axisAligned(const VecNT<M,T>& center, const VecNT<M,T>& halfWidth);
+    static Zonotope fromBox(const Box<T,M>& b);
+
+    bool contains(const Eigen::MatrixBase<Derived>& pt) const;   // solves G⁻¹(pt-c)
+    std::pair<Zonotope, Zonotope> split(int dim) const;          // bisect generator dim
+    T splitOrdinate(int dim) const;                              // center(dim)
+    tax::la::VecNT<M, T> denormalize(const Eigen::MatrixBase<Derived>& xi) const;
+};
+```
+
+A parallelotope: `{ center + G · ξ : ξ ∈ [-1,1]^M }`. The oriented generator
+matrix `G` lets a single leaf wrap a correlated or rotated IC set with a tighter
+fit than the axis-aligned bounding box — see [Zonotope](zonotope.md).
+`Zonotope` models `LocatableDomain`; `merge` works on zonotope trees.
+
+---
+
+## PolynomialZonotope
+
+```cpp
+// include/tax/ads/domains/polynomial_zonotope.hpp
+template <class T, int N, int M, class Storage = tax::storage::Dense>
+struct PolynomialZonotope {
+    using TE = TaylorExpansion<T, IsotropicScheme<N,M>, Storage>;
+    std::array<TE, M> value{};   // value[i](ξ) = i-th physical coordinate
+
+    static PolynomialZonotope fromBox(const Box<T,M>& b);
+
+    T center(int dim) const noexcept;                              // constant term of value[dim]
+    tax::la::VecNT<M,T> denormalize(const Eigen::MatrixBase<Derived>& xi) const;
+    bool contains(const Eigen::MatrixBase<Derived>& pt, T tol = 1e-12) const;  // conservative
+    std::pair<PolynomialZonotope, PolynomialZonotope> split(int dim) const;
+    // splitOrdinate NOT provided → models Domain but not LocatableDomain
+};
+```
+
+The IC set is a polynomial image of the cube. Degree-1 special cases recover
+`Box` (`fromBox`) or `Zonotope` (dense linear `value`). `contains` is a
+conservative over-approximation. `merge` is disabled at compile time for
+polynomial-zonotope trees. See [PolynomialZonotope](polynomial_zonotope.md).
+
+---
+
+## Reorient helpers
+
+```cpp
+// include/tax/ads/domains/reorient.hpp
+// Compose the flow map with a linear factor change  y(η) = x(R·η):
+reorientState(state, R) -> State;
+// Extract the D×M linear part  A = ∂x/∂ξ|₀  (the local STM):
+linearPart(state)       -> Eigen::Matrix<T, D, M>;
+// V from SVD(A) such that A·V has orthogonal columns:
+flowAlignedRotation(A)  -> Eigen::Matrix<T, M, M>;
+// Keep generators aligned: G → G·R
+reorientZonotope(z, R)  -> Zonotope<T, M>;
+```
+
+Used to pick the factor frame from the flow before propagation (see
+[Zonotope — adaptive orientation](zonotope.md#adaptive-orientation-aligning-the-frame-to-the-flow)).
+
+---
+
 ## Leaf
 
 ```cpp
-template <class Payload, int M, class T = double>
+template <class Payload, int M, class T = double, class Domain = Box<T, M>>
 struct Leaf {
-    Box<T, M> box{};
-    Payload   payload{};      // DA flow map valid on box
+    Domain  box{};
+    Payload payload{};        // DA flow map valid on box
     int  depth      = 0;      // number of splits to reach this leaf
     bool done       = false;  // finalized (propagated to t_final)
     bool retired    = false;  // parent of an active/done sibling pair
@@ -63,31 +163,32 @@ struct Leaf {
 ## AdsTree
 
 ```cpp
-template <class Payload, int M, class T = double>
+template <class Payload, int M, class T = double, class Domain = Box<T, M>>
 class AdsTree {
 public:
-    int  init(BoxT box, Payload payload, T tEntry = T{0});      // add root
-    std::pair<int, int> split(int idx, int dim, T splitValue,
+    int  init(Domain box, Payload payload, T tEntry = T{0});    // add root
+    std::pair<int, int> split(int idx, int dim,
                               Payload left, Payload right, T tEntry);
     void finalize(int idx);                                      // mark done
     void merge(int leftIdx, int rightIdx, Payload merged);       // collapse a pair
 
-    const Leaf<Payload, M, T>& leaf(int idx) const noexcept;
+    const Leaf<Payload, M, T, Domain>& leaf(int idx) const noexcept;
     std::span<const int> active() const noexcept;               // not-yet-finalized
     std::span<const int> done()   const noexcept;               // finalized leaves
     std::span<const int> roots()  const noexcept;
     void canonicalizeDone();                                     // sort done by box centre
 
-    std::optional<int> leaf(const Eigen::MatrixBase<Derived>& pt) const;   // point lookup
+    std::optional<int> locate(const Eigen::MatrixBase<Derived>& pt) const;  // point lookup
 };
 ```
 
 A **leaf-only arena tree**: every record is a `Leaf`; the shape is recovered
 from `parentIdx` / `siblingIdx`. A split retires the parent in place and
 appends two children; a merge revives the parent. `canonicalizeDone()` sorts
-the finalized leaves by box centre so parallel and serial runs agree and output
-is reproducible. Drivers populate the tree; users normally only read `done()`,
-`leaf(idx)` and `locate(pt)`.
+the finalized leaves by domain centre so parallel and serial runs agree and
+output is reproducible. Drivers populate the tree; users normally only read
+`done()`, `leaf(idx)` (by index) and `locate(pt)` (point lookup, returns the
+index of the first finalized leaf whose domain contains `pt`, or `nullopt`).
 
 ---
 
@@ -173,20 +274,26 @@ struct VolumeRatioCriterion {        // geometric, any dimension
 ## propagate
 
 ```cpp
-template <int P, class Method, class Criterion, class F, class T, int M, int D>
+template <int P, class Method, class Criterion, class F, class DomainArg, int D>
 auto propagate(Method, Criterion crit, F&& rhs,
-               const Box<T, M>& ic_box,
-               const Eigen::Matrix<T, D, 1>& ic_center,
-               const T& t0, const T& t1,
-               tax::ode::IntegratorConfig<T> cfg = {},
+               const DomainArg& ic_domain,
+               const Eigen::Matrix<domain_scalar_t<DomainArg>, D, 1>& ic_center,
+               const domain_scalar_t<DomainArg>& t0,
+               const domain_scalar_t<DomainArg>& t1,
+               tax::ode::IntegratorConfig<domain_scalar_t<DomainArg>> cfg = {},
                int num_threads = 1)
-    -> AdsTree<Eigen::Matrix<TaylorExpansion<T, P, M>, D, 1>, M, T>;
+    -> AdsSolution</*Stepper*/, domain_dim_v<DomainArg>, DomainArg>;
 ```
 
-Classic in-flight ADS. `Method` is an `ode::methods::` tag (`Verner89{}`,
-`Taylor<N>{}`, …) selecting the stepper. `num_threads > 1` runs independent
-boxes on a `jthread` pool. User events are *not* forwarded — instantiate
-[`AdsDriver`](#drivers) directly if you need them.
+Classic in-flight ADS. `DomainArg` is any `Domain` type (`Box`, `Zonotope`,
+`PolynomialZonotope`, …); `domain_traits` deduces the scalar `T` and factor
+dimension `M`. `Method` is an `ode::methods::` tag (`Verner89{}`, `Taylor<N>{}`,
+…) selecting the stepper. `num_threads > 1` runs independent boxes on a `jthread`
+pool. Returns `AdsSolution`, which holds the `AdsTree` and per-leaf ODE
+`Solution` objects; access the tree via `sol.tree()`.
+
+User events are *not* forwarded — instantiate [`AdsDriver`](#drivers) directly
+if you need them.
 
 ---
 

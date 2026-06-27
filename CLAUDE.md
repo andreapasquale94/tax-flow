@@ -59,11 +59,17 @@ tax-flow/
 │   │   ├── vector_ops.hpp    #   VectorOps<S> trait (scalar / TE / Eigen states)
 │   │   └── named.hpp         #   VectorOps for tax::named expansions as ODE state
 │   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
-│       ├── domains/box.hpp, leaf.hpp, tree.hpp
+│       ├── domains/          #   Domain+LocatableDomain concepts, domain_traits
+│       │   ├── domain.hpp    #     concept definitions + domain_traits
+│       │   ├── box.hpp       #     Box<T,M> (default domain)
+│       │   ├── zonotope.hpp  #     Zonotope<T,M> (oriented parallelotope)
+│       │   ├── polynomial_zonotope.hpp  # PolynomialZonotope<T,N,M>
+│       │   └── reorient.hpp  #     reorientState/Zonotope, flowAlignedRotation
+│       ├── detail/           #   internal helpers (nonlinearity_index, state_traits)
+│       ├── leaf.hpp, tree.hpp
 │       ├── split_criteria.hpp #   SplitCriterion, TruncationCriterion, NliCriterion
-│       ├── detail/nonlinearity_index.hpp
 │       ├── split_event.hpp, da_state.hpp
-│       ├── driver.hpp, propagate.hpp, merge.hpp
+│       ├── driver.hpp, propagate.hpp, merge.hpp, solution.hpp
 │       └── refine.hpp, refine_criteria.hpp
 ├── tests/                    # Google Test suite
 │   ├── ode/                  #   steppers/, integrator/, events/, problems/ (CR3BP, Kepler)
@@ -133,10 +139,11 @@ Methods: `methods::Taylor<N>`, `Verner78`, `Verner89`, `Fehlberg78`,
 using namespace tax::ode::methods;
 
 tax::ads::Box<double, 2> ic_box{center_vec, half_width_vec};
-auto tree = tax::ads::propagate</*P=*/6>(
+auto sol = tax::ads::propagate</*P=*/6>(
     Verner89{}, tax::ads::TruncationCriterion{/*tol=*/1e-4, /*maxDepth=*/8},
     rhs, ic_box, ic_center, 0.0, 2 * M_PI, cfg);
 
+const auto& tree = sol.tree();
 for (int i : tree.done()) { const auto& l = tree.leaf(i); /* l.payload */ }
 auto stats = tax::ads::merge(tree, tax::ads::TruncationCriterion{1e-4});
 ```
@@ -144,6 +151,17 @@ auto stats = tax::ads::merge(tree, tax::ads::TruncationCriterion{1e-4});
 Architecture: leaf-only arena tree (`AdsTree`); ADS interops with `tax::ode`
 events via `(SplitTrigger, SplitAction)`; splits happen at accepted-step
 boundaries only; the parallel `AdsDriver` runs `num_threads` jthread workers.
+`propagate` returns an `AdsSolution` wrapping the tree and per-leaf ODE
+`Solution` objects.
+
+**Domain interface:** the pipeline is generic over the IC domain type via two
+concept tiers (`Domain` / `LocatableDomain`). Three built-in primitives:
+
+- `Box<T, M>` — axis-aligned hyperrectangle (default; models both tiers).
+- `Zonotope<T, M>` — oriented parallelotope (full M×M generator matrix; models
+  both tiers; fewer leaves on rotated / correlated IC sets).
+- `PolynomialZonotope<T, N, M>` — polynomial image of the cube for curved IC
+  sets (models `Domain` only; `merge` refused at compile time).
 
 **Naming convention:** Top-level orchestration/result types carry the `Ads`
 prefix — `AdsTree`, `AdsDriver`, `AdsSolution`, `AdsRefineDriver` — because

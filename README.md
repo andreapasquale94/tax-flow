@@ -73,10 +73,13 @@ auto sol = tax::ode::propagate(Verner89{}, rhs, x0, 0.0, 2 * M_PI);
 #include <tax/ode.hpp>
 using namespace tax::ode::methods;
 
+// Box is the default domain; Zonotope and PolynomialZonotope are also supported.
 tax::ads::Box<double, 2> ic_box{center_vec, half_width_vec};
-auto tree = tax::ads::propagate</*P=*/6>(
+auto sol = tax::ads::propagate</*P=*/6>(
     Verner89{}, tax::ads::TruncationCriterion{1e-4, 8},
     rhs, ic_box, ic_center, 0.0, 2 * M_PI, cfg);
+
+const auto& tree = sol.tree();   // AdsSolution wraps the AdsTree + per-leaf ODE Solutions
 ```
 
 ## License
