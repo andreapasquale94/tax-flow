@@ -30,12 +30,10 @@
 
 #pragma once
 
-#include <condition_variable>
 #include <deque>
-#include <exception>
-#include <mutex>
 #include <span>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/detail/work_pool.hpp>
 #include <tax/ads/domains/box.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/tree.hpp>
@@ -44,7 +42,6 @@
 #include <tax/ode/config.hpp>
 #include <tax/ode/integrator.hpp>
 #include <tax/ode/propagate.hpp>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -179,56 +176,43 @@ class AdsRefineDriver
 
     // num_threads_ workers pull WorkItems from a shared queue. The expensive
     // assess() (two propagations) runs lock-free on copied-out inputs; the
-    // mutex guards only the queue and the tree mutation plus the in-flight
-    // counter. Termination: queue empty AND nothing in flight. The first
-    // worker exception wins and is rethrown on the calling thread.
+    // shared work-pool (detail::parallelDrive) guards only the queue and the
+    // tree mutation plus the in-flight counter, and owns termination, exception
+    // capture, and the notify policy.
     template < class F >
     void drive( const F& rhs, Tree& tree, std::deque< WorkItem > queue, T t0, T t1 )
     {
-        std::mutex mtx;
-        std::condition_variable cv;
-        int in_flight = 0;
-        bool stopping = false;
-        std::exception_ptr first_err = nullptr;
+        // assess()'s verdict carried alongside the originating item so apply()
+        // can commit it (the finalize branch needs it.treeIdx / it.flow, the
+        // split branch needs it.treeIdx / it.box / it.depth).
+        struct Result
+        {
+            WorkItem it{};
+            Verdict v{};
+        };
 
-        auto worker = [&]() {
-            for ( ;; )
-            {
-                std::unique_lock< std::mutex > lk( mtx );
-                cv.wait( lk, [&] { return stopping || !queue.empty() || in_flight == 0; } );
-
-                if ( stopping ) return;
-                if ( queue.empty() )
-                {
-                    if ( in_flight == 0 )
-                    {
-                        cv.notify_all();
-                        return;
-                    }
-                    continue;
-                }
-
+        detail::parallelDrive(
+            num_threads_,
+            // empty(): under lock.
+            [&] { return queue.empty(); },
+            // pop(): under lock — take the front WorkItem out.
+            [&]() -> WorkItem {
                 WorkItem it = std::move( queue.front() );
                 queue.pop_front();
-                ++in_flight;
-                lk.unlock();
-
+                return it;
+            },
+            // process(): lock-free assessment (two propagations) on the item.
+            [&]( WorkItem it ) -> Result {
                 Verdict v;
                 const bool capped = it.depth >= quality_.maxDepth;
-                try
-                {
-                    if ( !capped ) v = assess( rhs, it, t0, t1 );
-                } catch ( ... )
-                {
-                    lk.lock();
-                    if ( !first_err ) first_err = std::current_exception();
-                    stopping = true;
-                    --in_flight;
-                    cv.notify_all();
-                    return;
-                }
-
-                lk.lock();
+                if ( !capped ) v = assess( rhs, it, t0, t1 );
+                return Result{ std::move( it ), std::move( v ) };
+            },
+            // apply(): under lock — fan out into children (enqueueing work) or
+            // finalize the parent. Reports whether children were enqueued.
+            [&]( Result r ) -> bool {
+                WorkItem& it = r.it;
+                Verdict& v = r.v;
                 if ( v.split )
                 {
                     // Fan the parent out into 2^k leaves by cascading k binary
@@ -259,22 +243,12 @@ class AdsRefineDriver
                     for ( const Node& n : frontier )
                         queue.push_back( WorkItem{ std::move( v.inits[n.bits] ), n.box, child_depth,
                                                    n.idx, std::move( v.flows[n.bits] ) } );
-                } else
-                {
-                    tree.leaf( it.treeIdx ).payload = std::move( it.flow );
-                    tree.finalize( it.treeIdx );
+                    return true;
                 }
-                --in_flight;
-                cv.notify_all();
-            }
-        };
-
-        std::vector< std::thread > pool;
-        pool.reserve( static_cast< std::size_t >( num_threads_ ) );
-        for ( int i = 0; i < num_threads_; ++i ) pool.emplace_back( worker );
-        for ( auto& th : pool ) th.join();
-
-        if ( first_err ) std::rethrow_exception( first_err );
+                tree.leaf( it.treeIdx ).payload = std::move( it.flow );
+                tree.finalize( it.treeIdx );
+                return false;
+            } );
     }
 
     Quality quality_;
