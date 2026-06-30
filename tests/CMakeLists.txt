@@ -34,3 +34,6 @@ tax_add_test(test_ads_snapshots SOURCES ads/test_ads_snapshots.cpp)
 
 # ODE integrator
 add_subdirectory(ode)
+
+# SGP4
+add_subdirectory(sgp4)

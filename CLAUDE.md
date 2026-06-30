@@ -4,16 +4,21 @@
 
 **tax-flow** is the higher-level numerics layer built on top of
 [`tax`](https://github.com/andreapasquale94/tax), the header-only C++23
-Truncated Algebraic eXpansions (TAX) core. It ships two header-only modules:
+Truncated Algebraic eXpansions (TAX) core. It ships three header-only modules:
 
 - **`tax::ode`** — adaptive ODE integration (Runge–Kutta + Taylor methods) with
   an event system, dense output, and step-size controllers.
 - **`tax::ads`** — Automatic Domain Splitting (Wittig 2015) and the LOADS
   variant (Losacco/Fossà/Armellin 2024), composed on the `tax::ode` events.
+- **`tax::sgp4`** — a Taylor-compatible port of the SGP4/SDP4 satellite
+  propagator (Vallado / aholinch), templated on the scalar so the same code
+  yields ordinary `double` ephemerides or a polynomial map of the state w.r.t.
+  the seeded TLE mean elements.
 
-Both keep the original `<tax/ode.hpp>` / `<tax/ads.hpp>` include paths and
-`tax::ode` / `tax::ads` namespaces — they were split out of the `tax` repository
-unchanged. `ads` depends on `ode`; both depend on the `tax` core.
+`ode` / `ads` keep the original `<tax/ode.hpp>` / `<tax/ads.hpp>` include paths
+and `tax::ode` / `tax::ads` namespaces — they were split out of the `tax`
+repository unchanged. `ads` depends on `ode`; `sgp4` is independent of `ode`/`ads`;
+all depend on the `tax` core.
 
 - **Version:** 0.1.0
 - **License:** BSD 3-Clause
@@ -58,12 +63,20 @@ tax-flow/
 │   │   ├── event.hpp / triggers.hpp / actions.hpp
 │   │   ├── vector_ops.hpp    #   VectorOps<S> trait (scalar / TE / Eigen states)
 │   │   └── named.hpp         #   VectorOps for tax::named expansions as ODE state
-│   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
-│       ├── box.hpp, leaf.hpp, tree.hpp
-│       ├── criteria.hpp      #   SplitCriterion, TruncationCriterion, NliCriterion
-│       ├── nonlinearity_index.hpp, split_event.hpp, da_state.hpp
-│       ├── driver.hpp, propagate.hpp, merge.hpp
-│       └── refine.hpp, refine_criteria.hpp
+│   ├── ads/                  # Automatic Domain Splitting (namespace tax::ads)
+│   │   ├── box.hpp, leaf.hpp, tree.hpp
+│   │   ├── criteria.hpp      #   SplitCriterion, TruncationCriterion, NliCriterion
+│   │   ├── nonlinearity_index.hpp, split_event.hpp, da_state.hpp
+│   │   ├── driver.hpp, propagate.hpp, merge.hpp
+│   │   └── refine.hpp, refine_criteria.hpp
+│   ├── sgp4.hpp              # Facade: SGP4/SDP4 propagator (tax::sgp4)
+│   └── sgp4/                 # SGP4 satellite propagator (namespace tax::sgp4)
+│       ├── gravconst.hpp     #   GravModel + GravConstants (WGS-72/72old/84)
+│       ├── elset_rec.hpp     #   ElsetRec<T> (templated satrec)
+│       ├── tle.hpp           #   Tle::parse(line1, line2)
+│       ├── satellite.hpp     #   Satellite<T>, Seeds<T>, State<T>, seedsFrom
+│       └── detail/           #   scalar.hpp (cst/mod/dabs), time.hpp,
+│                             #   deep_space.hpp, sgp4_core.hpp (initl/sgp4init/sgp4)
 ├── tests/                    # Google Test suite
 │   ├── ode/                  #   steppers/, integrator/, events/, problems/ (CR3BP, Kepler)
 │   ├── ads/                  #   box, tree, criteria, driver, merge, parallel, refine
@@ -146,6 +159,38 @@ boundaries only; the parallel `AdsDriver` runs `num_threads` jthread workers.
 
 ---
 
+## SGP4 Propagator (`tax::sgp4`)
+
+```cpp
+#include <tax/sgp4.hpp>
+using namespace tax::sgp4;
+
+Tle tle = Tle::parse(line1, line2);
+
+// Plain double ephemeris.
+auto sat = Satellite<double>::fromTle(tle);   // or Satellite<double>(tle)
+State<double> s = sat.propagate(/*tsince min=*/120.0);   // s.r, s.v : VecNT<3,double> (TEME, km / km/s)
+
+// Taylor: expand the state w.r.t. chosen TLE mean elements.
+using TE = tax::TaylorExpansion<double, tax::IsotropicScheme</*order=*/2, /*vars=*/6>>;
+Seeds<TE> seeds{ TE(tle.bstar), TE(tle.ndot), TE(tle.nddot),
+                 TE::variable(tle.inclo, 0), TE::variable(tle.nodeo, 1), TE::variable(tle.ecco, 2),
+                 TE::variable(tle.argpo, 3), TE::variable(tle.mo, 4),    TE::variable(tle.no_kozai, 5) };
+Satellite<TE> satTE(tle, GravModel::Wgs72, seeds);
+State<TE> sTE = satTE.propagate(120.0);       // polynomial r,v; .value()/.gradient() per component
+```
+
+The full SGP4/SDP4 algorithm is templated on the scalar `T` (`ElsetRec<T>`,
+`detail::sgp4init` / `sgp4`). Every control-flow branch and convergence test
+keys off the constant part via `detail::cst`, and angle reductions go through
+`detail::mod` — so the polynomial map rides along the reference trajectory. The
+`double` instantiation reproduces Vallado's `tcppver.out` reference to < 1e-7 km.
+Branches and clamps (Kepler saturation, eccentricity floor) follow Vallado and
+key off the constant part. `opsmode` is `'i'` (improved, default) or `'a'`
+(afspc); the latter matches the published verification output.
+
+---
+
 ## Code Conventions
 
 Same as `tax`: PascalCase types, camelCase functions/methods, snake_case locals,
@@ -166,8 +211,11 @@ Concepts over SFINAE (`tax::ode::concepts::Stepper`, `tax::ads::SplitCriterion`)
 ## Testing
 
 Tests are registered via `tax_add_test(name SOURCES path.cpp)` in
-`tests/CMakeLists.txt` (ADS) and `tests/ode/CMakeLists.txt` (ODE). Each links
-the `tax-flow` interface target and gtest_main.
+`tests/CMakeLists.txt` (ADS), `tests/ode/CMakeLists.txt` (ODE) and
+`tests/sgp4/CMakeLists.txt` (SGP4). Each links the `tax-flow` interface target
+and gtest_main. The SGP4 suite includes a regression against Vallado's
+`tcppver.out` reference and a Taylor check (value identity + Jacobian vs finite
+differences).
 
 ```bash
 ctest --test-dir build --output-on-failure
