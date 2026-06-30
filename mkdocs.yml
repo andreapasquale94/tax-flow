@@ -114,6 +114,7 @@ nav:
       - Low-Thrust Reachability: tutorials/reachability.md
       - Missed-Thrust Dispersion: tutorials/missed_thrust.md
       - Missed-Thrust On/Off Duty Cycle: tutorials/missed_thrust_onoff.md
+      - Collision Probability (SGP4): tutorials/conjunction.md
   - ODE Integrator:
       - Overview: ode/index.md
       - Mathematical Foundations: ode/math.md
