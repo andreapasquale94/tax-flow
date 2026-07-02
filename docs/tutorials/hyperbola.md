@@ -41,6 +41,12 @@ The uncertainty is a 2-D transverse **position dispersion** in the inertial
 \((x, y)\) plane at the incoming epoch — an oriented rectangle (a `Zonotope`),
 its axis-aligned bounding `Box`, and a gently curved `PolynomialZonotope`.
 
+![Hyperbolic flyby geometry](img/hyperbola_geometry.png)
+
+The trajectory comes in along the lower asymptote, swings around the attractor
+at closest approach (red), and leaves along the upper asymptote; the \((x, z)\)
+panel shows the orbit is genuinely out of the \(x\)-\(y\) plane.
+
 ## Closest approach as an event
 
 Closest approach is the increasing zero-crossing of the radial velocity
@@ -107,23 +113,33 @@ momentum, the incoming asymptote unit vector
 vector \(\mathbf{B}\) of magnitude \(b = h / v_\infty\). Projecting
 \(\mathbf{B}(\xi)\) onto the **fixed nominal frame**
 \((\hat{T}, \hat{R})\) gives two DA polynomials \(B{\cdot}T(\xi)\) and
-\(B{\cdot}R(\xi)\) — the B-plane image of the IC set.
+\(B{\cdot}R(\xi)\) — the B-plane image of the IC set (panel (a) below).
 
-## Enclosing the B-plane image
+![B-plane and closest-approach enclosures](img/hyperbola_bplane.png)
 
-The \((B{\cdot}T, B{\cdot}R)\) image is described three ways, exactly the
-[set-representation hierarchy](../ads/zonotope.md):
+For a flyby the impact parameter is a nearly **linear** function of the initial
+condition, so the B-plane image (panel (a)) is a clean parallelogram — a
+first-order **zonotope** already encloses it tightly. You do not need domain
+splitting for the B-plane itself.
+
+## Enclosing the closest-approach set
+
+The genuine nonlinearity of the flyby is in **configuration space** near
+periapsis (gravitational focusing bends the set into a banana). So the
+box / zonotope / polynomial-zonotope hierarchy is most telling on the
+closest-approach **position** \((x, y)\) of \(X_{ca}\) (panel (b) above),
+exactly the [set-representation hierarchy](../ads/zonotope.md):
 
 - **box** — the interval hull \(c_0 \pm \sum_{\alpha\neq 0}\lvert c_\alpha
-  \rvert\), a rigorous axis-aligned enclosure;
-- **zonotope** — the first-order image \(c + J\xi\) (a parallelogram), from
-  the degree-1 coefficients;
-- **polynomial zonotope** — the full DA outline, the curved set the library
-  actually carries as a leaf payload.
+  \rvert\), a rigorous but loose axis-aligned enclosure;
+- **zonotope** — the first-order image \(c + J\xi\) (a parallelogram); it
+  tracks the set but overshoots at the curved tips — a linear image is *not*
+  an enclosure on its own;
+- **polynomial zonotope** — the full DA outline, hugging the true set; this is
+  the curved set the library carries as a leaf payload.
 
-A 10 000-sample Monte-Carlo cloud validates the enclosures. `bplane_taylor.cpp`
-writes `hyperbola_bplane.json`; panel (a) of the figure is the hierarchy over
-the cloud.
+A 5000-sample Monte-Carlo cloud validates the enclosures. `bplane_taylor.cpp`
+writes `hyperbola_bplane.json`.
 
 ## ADS: the event surface, one leaf at a time
 
@@ -147,23 +163,35 @@ auto sol = driver.run(rhs(), domain, icCenter(), 0.0, t_final);
 
 for (int li : sol.tree().done()) {
     const auto& leaf = sol.tree().leaf(li);   // leaf.payload = closest-approach flow map
-    // project bData(leaf.payload).B onto the nominal frame -> this leaf's B-plane tile
+    // evaluate leaf.payload's (x, y) over its cube -> this leaf's event-surface tile
 }
 ```
 
 `bplane_ads.cpp` runs the same oriented uncertainty as its bounding `Box` and
-as the oriented `Zonotope`, overlaying both event tilings on the cloud
-(panels (b)/(c)): the oriented domain tiles the event surface with fewer
-leaves.
+as the oriented `Zonotope`, tiling the closest-approach positions of each:
+
+![ADS tiling of the closest-approach event surface](img/hyperbola_event_tiling.png)
+
+Both tile the event surface into a handful of leaves, each carrying its
+sub-region's closest-approach flow map. The **oriented zonotope** (b) wraps the
+correlated set tightly; the axis-aligned **box** (a) must cover the same set
+with leaves that spill well beyond it — the same "oriented domains fit
+anisotropic sets better" lesson as the [zonotope tutorial](../ads/zonotope.md).
 
 ## Enclosure snapshots along the trajectory
 
 `snapshots.cpp` propagates the `Zonotope` and `PolynomialZonotope` IC sets with
 a snapshot grid and records the leaf partition at nine times along the flyby.
-The partition refines as the flow stretches through periapsis. The polynomial
-zonotope is propagated single-threaded (the parallel driver can be memory-heavy
-on large curved DA states) and never merged (it models `Domain` but not
-`LocatableDomain`).
+
+![Enclosure tilings along the trajectory](img/hyperbola_snapshots.png)
+
+The enclosure sweeps around the attractor, stretching into a banana as it goes.
+The **zonotope** domain (left) refines into many leaves as the flow stretches
+through periapsis; the **polynomial-zonotope** domain (right) carries the
+curvature in its payload and needs only one or two leaves for the same set. The
+polynomial zonotope is propagated single-threaded (the parallel driver can be
+memory-heavy on large curved DA states) and never merged (it models `Domain`
+but not `LocatableDomain`).
 
 ## Run it yourself
 
@@ -178,8 +206,8 @@ python3 ../../examples/plot/plot_hyperbola_snapshots.py --data . --out figs
 Things to try:
 
 - **Grow the dispersion** (`kIcHalfA`, `kIcHalfB` in
-  `examples/hyperbola/common.hpp`) and watch the B-plane image curve away from
-  its linear (zonotope) approximation, and the ADS leaf count rise.
+  `examples/hyperbola/common.hpp`) and watch the closest-approach set curve away
+  from its linear (zonotope) approximation, and the ADS leaf count rise.
 - **Change the geometry** (`kEcc`, `kNu0`, `kInc`) — a slower flyby (smaller
   \(e\)) bends more and needs more leaves.
 - **Add a second DA-Newton step** to the time-of-event correction and watch the

@@ -45,7 +45,7 @@ int main()
     cfg.abstol = cfg.reltol = 1e-12;
     cfg.save_steps = true;
 
-    const tax::ads::TruncationCriterion criterion{ /*tol=*/1e-5, /*maxDepth=*/7 };
+    const tax::ads::TruncationCriterion criterion{ /*tol=*/1e-4, /*maxDepth=*/7 };
     const auto boundary = unitSquareBoundary( kNPerEdge );
     const auto grid_times = example::linspace( 0.0, t_final, kNSnaps );
 
@@ -107,7 +107,7 @@ int main()
 
     printBanner( "hyperbola/snapshots — enclosure tilings along the flyby (Z and PZ)",
                  { { "P, M", std::to_string( P ) + ", " + std::to_string( M ) },
-                   { "criterion", "truncation, tol=1e-5, depth<=7" },
+                   { "criterion", "truncation, tol=1e-4, depth<=7" },
                    { "zono leaves/snap", zono_counts },
                    { "pz leaves/snap", pz_counts },
                    { "output", "hyperbola_snapshots_zono.json, hyperbola_snapshots_pz.json" } } );

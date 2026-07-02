@@ -16,10 +16,11 @@
 // convenience wrapper tax::ads::propagate<P> does NOT forward user events, so we
 // drive an AdsDriver directly.
 //
-// We run the SAME oriented uncertainty two ways — as its axis-aligned bounding
-// Box and as the oriented Zonotope — and overlay both leaf tilings on a
-// Monte-Carlo cloud in the (B.T, B.R) plane. The oriented domain tiles the
-// event surface with fewer leaves.
+// The strong nonlinearity of the flyby is in configuration space near periapsis
+// (the B-plane map itself is nearly linear), so we show the tiling of the
+// closest-approach POSITION (x, y). We run the SAME oriented uncertainty as its
+// axis-aligned bounding Box and as the oriented Zonotope: the oriented domain
+// tiles the event surface with fewer leaves.
 //
 // Run:    ./hyperbola_bplane_ads
 // Writes: hyperbola_bplane_ads.json  (plot with plot_hyperbola_bplane.py)
@@ -66,14 +67,10 @@ ExtraEvt periapsisEvent()
     return e;
 }
 
-// B-plane outline of one leaf's closest-approach flow map, projected on the
-// fixed nominal frame.
-Polygon leafBPlane( const DAState& payload, const Frame& fr,
-                    const std::vector< std::array< double, 2 > >& boundary, int id, int depth )
+// Closest-approach (x, y) outline of one leaf's flow map over its cube boundary.
+Polygon leafPoly( const DAState& payload, const std::vector< std::array< double, 2 > >& boundary,
+                  int id, int depth )
 {
-    const auto bd = bData( payload );
-    const TE BT = project( bd.Bx, bd.By, bd.Bz, fr.T );
-    const TE BR = project( bd.Bx, bd.By, bd.Bz, fr.R );
     Polygon p;
     p.id = id;
     p.depth = depth;
@@ -82,8 +79,8 @@ Polygon leafBPlane( const DAState& payload, const Frame& fr,
     for ( const auto& ab : boundary )
     {
         const auto d = boundaryToBox( ab[0], ab[1] );
-        p.x.push_back( BT.eval( d ) );
-        p.y.push_back( BR.eval( d ) );
+        p.x.push_back( payload( 0 ).eval( d ) );
+        p.y.push_back( payload( 1 ).eval( d ) );
     }
     return p;
 }
@@ -98,7 +95,7 @@ struct DomainResult
 template < class Domain >
 DomainResult scoreDomain( const std::string& name, const Domain& domain,
                           const tax::ads::TruncationCriterion& crit,
-                          const tax::ode::IntegratorConfig< double >& cfg, const Frame& fr,
+                          const tax::ode::IntegratorConfig< double >& cfg,
                           const std::vector< std::array< double, 2 > >& boundary, double t_final,
                           int threads )
 {
@@ -114,7 +111,7 @@ DomainResult scoreDomain( const std::string& name, const Domain& domain,
     for ( int li : tree.done() )
     {
         const auto& leaf = tree.leaf( li );
-        r.leaves.push_back( leafBPlane( leaf.payload, fr, boundary, id++, leaf.depth ) );
+        r.leaves.push_back( leafPoly( leaf.payload, boundary, id++, leaf.depth ) );
     }
     return r;
 }
@@ -124,7 +121,6 @@ int main()
 {
     const double t_final = tFinal();
     const Vec6 center = icCenter();
-    const Frame frame = nominalFrame( center );
     const auto boundary = unitSquareBoundary( kNPerEdge );
 
     tax::ode::IntegratorConfig< double > cfg;
@@ -133,38 +129,50 @@ int main()
 
     const tax::ads::TruncationCriterion criterion{ /*tol=*/1e-4, /*maxDepth=*/7 };
 
-    // ---- Monte-Carlo truth cloud (samples of the oriented zonotope set) ------
+    // Scalar closest-approach event, used to get each Monte-Carlo sample's
+    // closest-approach position and the center's.
+    auto scalarPeri = []() {
+        auto g = []( const auto& x, double ) -> double {
+            return x( 0 ) * x( 3 ) + x( 1 ) * x( 4 ) + x( 2 ) * x( 5 );
+        };
+        std::vector< std::shared_ptr< tax::ode::Event< Vec6, double > > > ev;
+        ev.push_back(
+            std::make_shared< tax::ode::RootFindingEvent< Vec6, double, decltype( g ) > >(
+                g, tax::ode::Direction::Increasing, "ca", /*terminal=*/true ) );
+        return ev;
+    };
+    auto caPosition = [&]( const Vec6& ic ) -> std::array< double, 2 > {
+        auto s = tax::ode::propagate( Verner89{}, rhs(), ic, 0.0, t_final, cfg, scalarPeri() );
+        return { s.x.back()( 0 ), s.x.back()( 1 ) };
+    };
+
+    // ---- Monte-Carlo cloud: closest-approach positions of the zonotope set --
     const auto zono = icZonotope();
-    tax::ode::IntegratorConfig< double > mcCfg = cfg;
     std::mt19937 rng( 4242u );
     std::uniform_real_distribution< double > unit( -1.0, 1.0 );
-    std::vector< double > mc_bt, mc_br;
-    mc_bt.reserve( kNMonte );
-    mc_br.reserve( kNMonte );
+    std::vector< double > mc_x, mc_y;
+    mc_x.reserve( kNMonte );
+    mc_y.reserve( kNMonte );
     for ( int s = 0; s < kNMonte; ++s )
     {
         const double xi0 = unit( rng ), xi1 = unit( rng );
         Vec6 ic = center;
         ic( 0 ) += zono.generators( 0, 0 ) * xi0 + zono.generators( 0, 1 ) * xi1;
         ic( 1 ) += zono.generators( 1, 0 ) * xi0 + zono.generators( 1, 1 ) * xi1;
-        auto msol = tax::ode::propagate( Verner89{}, rhs(), ic, 0.0, t_final, mcCfg );
-        const auto mbd = bData( msol.x.back() );
-        mc_bt.push_back( project( mbd.Bx, mbd.By, mbd.Bz, frame.T ) );
-        mc_br.push_back( project( mbd.Bx, mbd.By, mbd.Bz, frame.R ) );
+        const auto p = caPosition( ic );
+        mc_x.push_back( p[0] );
+        mc_y.push_back( p[1] );
     }
+    const auto c0 = caPosition( center );
 
     // ---- ADS event tiling for the box vs the oriented zonotope --------------
     Stopwatch clock;
     std::vector< DomainResult > doms;
-    doms.push_back( scoreDomain( "bounding box", icBox(), criterion, cfg, frame, boundary, t_final,
-                                 adsThreads() ) );
-    doms.push_back( scoreDomain( "oriented zonotope", icZonotope(), criterion, cfg, frame, boundary,
+    doms.push_back(
+        scoreDomain( "bounding box", icBox(), criterion, cfg, boundary, t_final, adsThreads() ) );
+    doms.push_back( scoreDomain( "oriented zonotope", icZonotope(), criterion, cfg, boundary,
                                  t_final, adsThreads() ) );
     const double elapsed_ms = clock.ms();
-
-    const auto bd0 = bData( center );
-    const double bt0 = project( bd0.Bx, bd0.By, bd0.Bz, frame.T );
-    const double br0 = project( bd0.Bx, bd0.By, bd0.Bz, frame.R );
 
     // ---- Output --------------------------------------------------------------
     std::ofstream out( "hyperbola_bplane_ads.json" );
@@ -173,11 +181,11 @@ int main()
     out << "  \"problem\": \"hyperbola_bplane_ads\",\n";
     out << "  \"t_final\": " << t_final << ",\n";
     out << "  \"tol\": " << criterion.tol << ", \"max_depth\": " << criterion.maxDepth << ",\n";
-    out << "  \"b_center\": [" << bt0 << ", " << br0 << "],\n";
-    out << "  \"mc\": { \"bt\": ";
-    writeJsonArray( out, mc_bt );
-    out << ", \"br\": ";
-    writeJsonArray( out, mc_br );
+    out << "  \"center\": [" << c0[0] << ", " << c0[1] << "],\n";
+    out << "  \"mc\": { \"x\": ";
+    writeJsonArray( out, mc_x );
+    out << ", \"y\": ";
+    writeJsonArray( out, mc_y );
     out << " },\n";
     out << "  \"domains\": [\n";
     for ( std::size_t i = 0; i < doms.size(); ++i )

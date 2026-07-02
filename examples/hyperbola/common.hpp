@@ -150,8 +150,8 @@ inline double tFinal() { return 2.0 * tPeri(); }
 // gently curved PolynomialZonotope variant. Only state components 0 (x) and
 // 1 (y) carry uncertainty (M = 2 factors); the rest stay pinned to the center.
 inline constexpr int kM = 2;               // number of DA / uncertainty factors
-inline constexpr double kIcHalfA = 0.06;   // half-width along principal axis 1
-inline constexpr double kIcHalfB = 0.03;   // half-width along principal axis 2
+inline constexpr double kIcHalfA = 0.28;   // half-width along principal axis 1
+inline constexpr double kIcHalfB = 0.15;   // half-width along principal axis 2
 inline const double kIcTilt = M_PI / 6.0;  // orientation of the (x, y) block
 
 inline tax::ads::Zonotope< double, kM > icZonotope()
@@ -186,7 +186,7 @@ inline tax::ads::PolynomialZonotope< double, P, kM > icPolyZono()
     auto pz = tax::ads::PolynomialZonotope< double, P, kM >::fromBox( icBox() );
     tax::MultiIndex< kM > a{};
     a[0] = 2;  // total degree 2 on the xi_0 axis
-    pz.value[0][tax::flatIndex< kM >( a )] = 0.25 * icBox().halfWidth( 0 );
+    pz.value[0][tax::flatIndex< kM >( a )] = 0.12 * icBox().halfWidth( 0 );
     return pz;
 }
 
