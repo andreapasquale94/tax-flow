@@ -11,9 +11,9 @@
 #include <cmath>
 #include <cstddef>
 #include <tax/ads/da_state.hpp>
-#include <tax/ads/domains/reorient.hpp>
-#include <tax/ads/domains/zonotope.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/reorient.hpp>
+#include <tax/domain/zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 
@@ -53,7 +53,7 @@ TEST( Reorient, EvalEquivalence )
 {
     const DAState x = sampleMap();
     const Mat2 R = rot( 0.6 );
-    const DAState y = tax::ads::reorientState( x, R );
+    const DAState y = tax::domain::reorientState( x, R );
 
     // y(η) must equal x(R·η) for arbitrary η in the domain.
     const std::array< V2, 5 > etas{
@@ -70,7 +70,7 @@ TEST( Reorient, EvalEquivalence )
 TEST( Reorient, IdentityRotationIsNoOp )
 {
     const DAState x = sampleMap();
-    const DAState y = tax::ads::reorientState( x, Mat2::Identity() );
+    const DAState y = tax::domain::reorientState( x, Mat2::Identity() );
     constexpr std::size_t Nc = tax::numMonomials( P, M );
     for ( int i = 0; i < D; ++i )
         for ( std::size_t k = 0; k < Nc; ++k ) EXPECT_NEAR( y( i )[k], x( i )[k], 1e-12 );
@@ -79,7 +79,7 @@ TEST( Reorient, IdentityRotationIsNoOp )
 TEST( Reorient, LinearPartIsTheJacobian )
 {
     const DAState x = sampleMap();
-    const auto A = tax::ads::linearPart( x );
+    const auto A = tax::domain::linearPart( x );
     // ∂x0/∂ξ0 = 1, ∂x0/∂ξ1 = 0, ∂x1/∂ξ0 = 0, ∂x1/∂ξ1 = -0.5.
     EXPECT_NEAR( A( 0, 0 ), 1.0, 1e-12 );
     EXPECT_NEAR( A( 0, 1 ), 0.0, 1e-12 );
@@ -93,7 +93,7 @@ TEST( Reorient, FlowAlignedRotationOrthogonalizesColumns )
 {
     Mat2 A;
     A << 1.0, 0.8, 0.2, 1.3;  // sheared — columns not orthogonal
-    const Mat2 V = tax::ads::flowAlignedRotation( A );
+    const Mat2 V = tax::domain::flowAlignedRotation( A );
     const Mat2 AV = A * V;
     EXPECT_NEAR( AV.col( 0 ).dot( AV.col( 1 ) ), 0.0, 1e-12 );
     // V is orthogonal.
@@ -110,16 +110,16 @@ TEST( Reorient, IdentityAndZonotopeStayConsistent )
     Mat2 G;
     G << 0.5, 0.1, -0.2, 0.4;
 
-    tax::ads::Zonotope< double, M > z;
+    tax::domain::Zonotope< double, M > z;
     z.center = V2{ 0.0, 0.0 };
     z.generators = G;
     const tax::la::VecNT< D, double > c{ 1.0, 2.0 };
 
-    const DAState id = tax::ads::create< P, M >( z, c );
-    const DAState id_re = tax::ads::reorientState( id, R );
+    const DAState id = tax::domain::create< P, M >( z, c );
+    const DAState id_re = tax::domain::reorientState( id, R );
 
-    const auto zr = tax::ads::reorientZonotope( z, R );
-    const DAState id_zr = tax::ads::create< P, M >( zr, c );
+    const auto zr = tax::domain::reorientZonotope( z, R );
+    const DAState id_zr = tax::domain::create< P, M >( zr, c );
 
     constexpr std::size_t Nc = tax::numMonomials( P, M );
     for ( int i = 0; i < D; ++i )

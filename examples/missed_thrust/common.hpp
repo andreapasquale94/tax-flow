@@ -46,7 +46,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <tax/ads/domains/box.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 
@@ -63,13 +63,13 @@ inline constexpr double kV0 = 1.0;               // circular speed sqrt(mu/r0)
 inline const double kPeriod = 2.0 * M_PI;        // one orbital period
 inline constexpr double kAccelUnit = 5.9301e-3;  // m/s^2 at 1 AU (= mu_sun / LU^2)
 
-inline constexpr int kNArcs = 36;                       // 36 arcs of 10 deg each
-inline const double kArc = kPeriod / kNArcs;            // one 10-degree arc, in TU
-inline constexpr double kDegPerArc = 360.0 / kNArcs;    // 10 degrees per arc
+inline constexpr int kNArcs = 36;                     // 36 arcs of 10 deg each
+inline const double kArc = kPeriod / kNArcs;          // one 10-degree arc, in TU
+inline constexpr double kDegPerArc = 360.0 / kNArcs;  // 10 degrees per arc
 
 // ---- Execution-error magnitudes (continuous DA / surrogate variables) ------
-inline constexpr double kSigmaM = 0.02;                       // +-2% magnitude error
-inline constexpr double kSigmaTheta = 5.0 * M_PI / 180.0;     // +-5 deg pointing error
+inline constexpr double kSigmaM = 0.02;                    // +-2% magnitude error
+inline constexpr double kSigmaTheta = 5.0 * M_PI / 180.0;  // +-5 deg pointing error
 
 // ---- Spacecraft preset ------------------------------------------------------
 // 1000 kg spacecraft, 100 mN -> a_max ~ 0.0169 (the nominal commanded accel).
@@ -174,10 +174,10 @@ inline auto rhs( double magBase, double thetaNom )
         const auto zero = dm - dm;  // typed zero (double or TE)
 
         S out;
-        out( 0 ) = zero;              // d(delta_m)/dt  = 0
-        out( 1 ) = zero;              // d(delta_th)/dt = 0
-        out( 2 ) = vx;               // dx/dt  = vx
-        out( 3 ) = vy;               // dy/dt  = vy
+        out( 0 ) = zero;                // d(delta_m)/dt  = 0
+        out( 1 ) = zero;                // d(delta_th)/dt = 0
+        out( 2 ) = vx;                  // dx/dt  = vx
+        out( 3 ) = vy;                  // dy/dt  = vy
         out( 4 ) = -x / r3 + mag * dx;  // dvx/dt = gravity + thrust_x
         out( 5 ) = -y / r3 + mag * dy;  // dvy/dt = gravity + thrust_y
         return out;

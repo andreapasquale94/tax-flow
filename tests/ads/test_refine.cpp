@@ -11,18 +11,18 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/refine.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/tax.hpp>
 #include <vector>
 
-using tax::ads::Box;
 using tax::ads::CoefficientMatchCriterion;
 using tax::ads::VolumeRatioCriterion;
+using tax::domain::Box;
 using tax::ode::IntegratorConfig;
 using tax::ode::methods::Verner89;
 
@@ -61,7 +61,7 @@ ScState evalLeaf( const Leaf& leaf, const ScState& xi )
     std::array< double, M > xi_local{};
     for ( int j = 0; j < M; ++j )
         xi_local[static_cast< std::size_t >( j )] =
-            ( xi( j ) - leaf.box.center( j ) ) / leaf.box.halfWidth( j );
+            ( xi( j ) - leaf.domain.center( j ) ) / leaf.domain.halfWidth( j );
 
     ScState out;
     for ( int row = 0; row < D; ++row )
@@ -192,8 +192,8 @@ TEST( AdsRefine, ParallelMatchesSerial )
         const auto& lp = parallel.leaf( pIdx[i] );
         for ( int j = 0; j < M; ++j )
         {
-            EXPECT_DOUBLE_EQ( ls.box.center( j ), lp.box.center( j ) );
-            EXPECT_DOUBLE_EQ( ls.box.halfWidth( j ), lp.box.halfWidth( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.center( j ), lp.domain.center( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.halfWidth( j ), lp.domain.halfWidth( j ) );
         }
         constexpr std::size_t Nc = tax::numMonomials( P, M );
         for ( int row = 0; row < D; ++row )
@@ -255,8 +255,8 @@ TEST( AdsRefine, AggressiveParallelMatchesSerial )
         const auto& lp = parallel.leaf( pIdx[i] );
         for ( int j = 0; j < M; ++j )
         {
-            EXPECT_DOUBLE_EQ( ls.box.center( j ), lp.box.center( j ) );
-            EXPECT_DOUBLE_EQ( ls.box.halfWidth( j ), lp.box.halfWidth( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.center( j ), lp.domain.center( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.halfWidth( j ), lp.domain.halfWidth( j ) );
         }
     }
 }

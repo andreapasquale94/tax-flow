@@ -22,8 +22,8 @@
 
 #include <array>
 #include <cmath>
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/domains/zonotope.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
@@ -84,9 +84,9 @@ inline tax::la::VecNT< 4, double > icCenter()
 // excessive ADS subdivisions.
 inline const tax::la::VecNT< 4, double > kIcBoxHalfWidth{ 0.0, 8e-3, 0.0, 2e-2 };
 
-inline tax::ads::Box< double, 4 > icBox()
+inline tax::domain::Box< double, 4 > icBox()
 {
-    return tax::ads::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
+    return tax::domain::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
 }
 
 // ---- Boundary coordinates -> normalised 4D displacement ---------------------
@@ -107,9 +107,9 @@ inline constexpr double kIcYHalf = 0.04;   // half-width along the principal y' 
 inline constexpr double kIcVHalf = 0.06;   // half-width along the principal vy' axis
 inline const double kIcTilt = M_PI / 4.0;  // rotation of the (y, vy) block [rad]
 
-inline tax::ads::Zonotope< double, 4 > icZonotope()
+inline tax::domain::Zonotope< double, 4 > icZonotope()
 {
-    tax::ads::Zonotope< double, 4 > z;
+    tax::domain::Zonotope< double, 4 > z;
     z.center = icCenter();
     z.generators.setZero();
     const double c = std::cos( kIcTilt );
@@ -122,15 +122,8 @@ inline tax::ads::Zonotope< double, 4 > icZonotope()
     return z;
 }
 
-// Axis-aligned Box that tightly bounds icZonotope(): each per-axis half-width
-// is the L1 norm of the corresponding generator row — what you would have to
+// Axis-aligned Box that tightly bounds icZonotope() — what you would have to
 // hand the classic box ADS to be sure of covering the same set.
-inline tax::ads::Box< double, 4 > icZonotopeBoundingBox()
-{
-    const auto z = icZonotope();
-    tax::la::VecNT< 4, double > hw;
-    for ( int i = 0; i < 4; ++i ) hw( i ) = z.generators.row( i ).cwiseAbs().sum();
-    return tax::ads::Box< double, 4 >{ z.center, hw };
-}
+inline tax::domain::Box< double, 4 > icZonotopeBoundingBox() { return icZonotope().intervalHull(); }
 
 }  // namespace example::two_body

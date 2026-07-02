@@ -14,17 +14,17 @@
 #include <cstddef>
 #include <tax/ads.hpp>
 #include <tax/ads/da_state.hpp>
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/domains/polynomial_zonotope.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/polynomial_zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
 // Permanent compile-time guards (the tier gate):
 //   PolynomialZonotope MUST model Domain but MUST NOT model LocatableDomain.
-static_assert( tax::ads::Domain< tax::ads::PolynomialZonotope< double, 4, 2 > >,
+static_assert( tax::domain::Domain< tax::domain::PolynomialZonotope< double, 4, 2 > >,
                "PolynomialZonotope must model the core Domain concept" );
-static_assert( !tax::ads::LocatableDomain< tax::ads::PolynomialZonotope< double, 4, 2 > >,
+static_assert( !tax::domain::LocatableDomain< tax::domain::PolynomialZonotope< double, 4, 2 > >,
                "PolynomialZonotope must NOT model LocatableDomain (no exact split-ordinate)" );
 
 namespace
@@ -33,7 +33,7 @@ constexpr int N = 4;  // generator degree
 constexpr int M = 2;
 
 using V2 = tax::la::VecNT< M, double >;
-using PZ = tax::ads::PolynomialZonotope< double, N, M >;
+using PZ = tax::domain::PolynomialZonotope< double, N, M >;
 using TE = PZ::TE;
 
 // Set coefficient of monomial ξ0^a0 · ξ1^a1 in a degree-N expansion.
@@ -67,7 +67,7 @@ PZ curvedPZ()
 // ---------------------------------------------------------------------------
 TEST( PolynomialZonotope, FromBoxMatchesBox )
 {
-    tax::ads::Box< double, M > b{ { 1.0, -0.5 }, { 0.3, 0.7 } };
+    tax::domain::Box< double, M > b{ { 1.0, -0.5 }, { 0.3, 0.7 } };
     auto z = PZ::fromBox( b );
 
     for ( double a : { -1.0, -0.4, 0.0, 0.6, 1.0 } )
@@ -137,12 +137,12 @@ TEST( PolynomialZonotope, CenterIsConstantTerm )
 // ---------------------------------------------------------------------------
 TEST( PolynomialZonotope, CreateMatchesBoxSeed )
 {
-    tax::ads::Box< double, M > b{ { 1.0, -0.5 }, { 0.3, 0.7 } };
+    tax::domain::Box< double, M > b{ { 1.0, -0.5 }, { 0.3, 0.7 } };
     auto z = PZ::fromBox( b );
     const V2 x0{ 2.0, 3.0 };
 
-    auto sPz = tax::ads::create< N, M >( z, x0 );
-    auto sBox = tax::ads::create< N, M >( b, x0 );
+    auto sPz = tax::domain::create< N, M >( z, x0 );
+    auto sBox = tax::domain::create< N, M >( b, x0 );
 
     constexpr std::size_t Ncoef = tax::numMonomials( N, M );
     for ( int i = 0; i < M; ++i )
@@ -186,8 +186,8 @@ TEST( PolynomialZonotope, PropagateRuns )
     constexpr int D = 2;
 
     // Small box IC turned into a polynomial zonotope (degree-1 = linear generators).
-    tax::ads::Box< double, kM > ic_box{ { 1.0, 0.0 }, { 0.05, 0.02 } };
-    auto pz = tax::ads::PolynomialZonotope< double, P, kM >::fromBox( ic_box );
+    tax::domain::Box< double, kM > ic_box{ { 1.0, 0.0 }, { 0.05, 0.02 } };
+    auto pz = tax::domain::PolynomialZonotope< double, P, kM >::fromBox( ic_box );
     // Add a tiny ξ₀² curvature to value[0] (x-component) to make it genuinely
     // polynomial rather than just a linear / zonotope-equivalent set.
     {

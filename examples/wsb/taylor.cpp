@@ -14,8 +14,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
@@ -48,7 +48,7 @@ int main()
     cfg.min_step = 1.0e-14;
     cfg.save_steps = true;
 
-    DAState x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
+    DAState x0_da = tax::domain::create< P, M >( ic_box, icCenter() );
     const auto t0 = std::chrono::high_resolution_clock::now();
     auto sol = tax::ode::propagate( Feagin12{}, rhs(), x0_da, 0.0, tFinal_days / kTimeU_days, cfg );
     const auto t1 = std::chrono::high_resolution_clock::now();

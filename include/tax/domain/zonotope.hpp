@@ -1,8 +1,8 @@
-// include/tax/ads/domains/zonotope.hpp
+// include/tax/domain/zonotope.hpp
 //
 // Zonotope<T, M> — a parallelotope (the unconstrained member of the
 // constrained-zonotope family of Scott et al. 2016 / Kochdumper & Althoff
-// 2020) used as an alternative geometric primitive for the ADS tree.
+// 2020) used as an oriented alternative to Box.
 //
 // Where Box<T, M> is an axis-aligned hyperrectangle
 //
@@ -15,28 +15,29 @@
 //
 // A Box is exactly the special case G = diag(halfWidth) — recoverable via
 // Zonotope::fromBox / Zonotope::axisAligned. Allowing G to be a general
-// (oriented) matrix lets a single leaf wrap a correlated / rotated initial
-// set that an axis-aligned box would have to cover with a much larger
-// bounding rectangle — and a larger domain carries more truncation mass,
-// so it splits more. Oriented domains are the lever for *fewer* leaves on
-// anisotropic problems.
+// (oriented) matrix lets a single ADS leaf wrap a correlated / rotated
+// initial set that an axis-aligned box would have to cover with a much
+// larger bounding rectangle — and a larger domain carries more truncation
+// mass, so it splits more. Oriented domains are the lever for *fewer*
+// leaves on anisotropic problems.
 //
 // Everything downstream of the domain (the DA flow-map payload and the
-// split/merge polynomial substitutions in da_state.hpp / merge.hpp) works
-// in the normalised factor coordinates ξ ∈ [-1, 1]^M and is therefore
-// independent of whether those factors are scaled by a diagonal (Box) or a
-// dense generator matrix (Zonotope). The only domain-aware operations are
-// the ones below: contains / denormalize / split / splitOrdinate.
+// split/merge polynomial substitutions in tax::ads) works in the normalised
+// factor coordinates ξ ∈ [-1, 1]^M and is therefore independent of whether
+// those factors are scaled by a diagonal (Box) or a dense generator matrix
+// (Zonotope). The only domain-aware operations are the ones below:
+// localize / contains / denormalize / split / splitOrdinate / intervalHull.
 
 #pragma once
 
-#include <Eigen/Dense>  // partialPivLu for contains()
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/domains/domain.hpp>
+#include <Eigen/Dense>  // completeOrthogonalDecomposition for localize()
+#include <cmath>
+#include <tax/domain/box.hpp>
+#include <tax/domain/domain.hpp>
 #include <tax/la/types.hpp>
 #include <utility>
 
-namespace tax::ads
+namespace tax::domain
 {
 
 template < class T, int M >
@@ -45,7 +46,7 @@ struct Zonotope
     static_assert( M >= 1, "Zonotope dimension must be at least 1" );
 
     tax::la::VecNT< M, T > center = tax::la::VecNT< M, T >::Zero();
-    // Column j is the generator spanning factor ξ_j; the leaf domain is the
+    // Column j is the generator spanning factor ξ_j; the domain is the
     // image of the cube [-1, 1]^M under ξ ↦ center + generators · ξ.
     tax::la::MatNT< M, T > generators = tax::la::MatNT< M, T >::Zero();
 
@@ -66,20 +67,49 @@ struct Zonotope
         return axisAligned( b.center, b.halfWidth );
     }
 
-    // Is pt inside the parallelotope? Recover the factor coordinates
-    // ξ = G⁻¹ (pt - center) and test ‖ξ‖∞ ≤ 1. tol guards the boundary
-    // against round-off (matches Box's inclusive [-halfWidth, halfWidth]).
+    // Oriented parallelotope R · diag(halfWidth): the "rotation × diagonal"
+    // pattern of a rotated-rectangle uncertainty set.
+    template < class Derived >
+    [[nodiscard]] static Zonotope oriented( const tax::la::VecNT< M, T >& center,
+                                            const Eigen::MatrixBase< Derived >& R,
+                                            const tax::la::VecNT< M, T >& halfWidth )
+    {
+        Zonotope z;
+        z.center = center;
+        z.generators = R * halfWidth.asDiagonal();
+        return z;
+    }
+
+    // Factor coordinates of pt: the minimum-norm ξ with G·ξ = pt - center.
+    // Uses a rank-revealing decomposition, so rank-deficient generator
+    // matrices (e.g. deliberately zeroed inactive axes) are handled: the
+    // null-space component of ξ is 0, mirroring Box::localize on zero-width
+    // axes. Whether pt actually lies on the (possibly degenerate) set is
+    // contains()'s job — it additionally checks the reconstruction residual.
+    template < class Derived >
+    [[nodiscard]] tax::la::VecNT< M, T > localize( const Eigen::MatrixBase< Derived >& pt ) const
+    {
+        const tax::la::VecNT< M, T > rhs = pt - center;
+        return generators.completeOrthogonalDecomposition().solve( rhs );
+    }
+
+    // Is pt inside the parallelotope? Recover ξ = localize(pt) and test
+    // ‖ξ‖∞ ≤ 1 plus the reconstruction residual (nonzero iff pt is off the
+    // span of a rank-deficient G). tol guards the boundary against round-off
+    // (matches Box's inclusive [-halfWidth, halfWidth]).
     template < class Derived >
     [[nodiscard]] bool contains( const Eigen::MatrixBase< Derived >& pt, T tol = T{ 1e-12 } ) const
     {
-        const tax::la::VecNT< M, T > rhs = pt - center;
-        const tax::la::VecNT< M, T > xi = generators.partialPivLu().solve( rhs );
+        const tax::la::VecNT< M, T > xi = localize( pt );
         for ( int i = 0; i < M; ++i )
         {
             if ( xi( i ) > T{ 1 } + tol ) return false;
             if ( xi( i ) < T{ -1 } - tol ) return false;
         }
-        return true;
+        const tax::la::VecNT< M, T > res = generators * xi - ( pt - center );
+        const T scale = T{ 1 } + center.template lpNorm< Eigen::Infinity >() +
+                        generators.template lpNorm< Eigen::Infinity >();
+        return res.template lpNorm< Eigen::Infinity >() <= tol * scale;
     }
 
     // Bisect along generator `dim`: halve that column and shift the centre
@@ -114,6 +144,15 @@ struct Zonotope
     {
         return center.dot( generators.col( dim ) );
     }
+
+    // Tightest axis-aligned Box covering the parallelotope: per axis i the
+    // extent is the L1 norm of generator row i (the support of the cube).
+    [[nodiscard]] Box< T, M > intervalHull() const noexcept
+    {
+        tax::la::VecNT< M, T > hw;
+        for ( int i = 0; i < M; ++i ) hw( i ) = generators.row( i ).cwiseAbs().sum();
+        return Box< T, M >{ center, hw };
+    }
 };
 
 template < class T, int M >
@@ -123,4 +162,4 @@ struct domain_traits< Zonotope< T, M > >
     static constexpr int dim = M;
 };
 
-}  // namespace tax::ads
+}  // namespace tax::domain

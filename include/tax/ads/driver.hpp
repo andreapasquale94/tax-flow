@@ -13,11 +13,12 @@
 #include <memory>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/detail/work_pool.hpp>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/solution.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/create.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/event.hpp>
 #include <tax/ode/integrator.hpp>
@@ -28,9 +29,9 @@
 namespace tax::ads
 {
 
-// Domain defaults to void → resolved below to Box<T,M> (T,M derive from Stepper
-// and can't be named in the template default). Pass e.g. Zonotope<T,M> for
-// oriented leaves.
+// Domain defaults to void → resolved below to tax::domain::Box<T,M> (T,M
+// derive from Stepper and can't be named in the template default). Pass e.g.
+// tax::domain::Zonotope<T,M> for oriented leaves.
 template < class Stepper, class Criterion, class Domain = void >
 class AdsDriver
 {
@@ -45,9 +46,9 @@ class AdsDriver
     static constexpr int M = TE::vars_v;
     static constexpr int D = State::RowsAtCompileTime;
 
-    using DomainT = std::conditional_t< std::is_void_v< Domain >, Box< T, M >, Domain >;
-    using Tree = AdsTree< State, M, T, DomainT >;
-    using BoxT = DomainT;
+    using DomainT =
+        std::conditional_t< std::is_void_v< Domain >, tax::domain::Box< T, M >, Domain >;
+    using Tree = AdsTree< State, DomainT >;
     using LeafSol = tax::ode::Solution< Stepper, State >;
 
     // The driver uses Stepper::T as the (real) time/scalar type. Embedded-RK
@@ -67,13 +68,16 @@ class AdsDriver
     }
 
     template < class F >
-    [[nodiscard]] AdsSolution< Stepper, M, DomainT > run( F&& rhs, const BoxT& ic_box,
-                                                          const Eigen::Matrix< T, D, 1 >& ic_center,
-                                                          T t0, T t1 )
+    [[nodiscard]] AdsSolution< Stepper, DomainT > run( F&& rhs, const DomainT& ic_domain,
+                                                       const Eigen::Matrix< T, D, 1 >& ic_center,
+                                                       T t0, T t1 )
     {
         Tree tree;
-        State root_state = tax::ads::create< N, M >( ic_box, ic_center );
-        (void)tree.init( ic_box, std::move( root_state ), t0 );
+        // Unqualified: ADL finds the create() overload in the domain's own
+        // namespace (tax::domain for the built-ins, or a user namespace for a
+        // custom Domain), including overloads declared after this header.
+        State root_state = create< N, M >( ic_domain, ic_center );
+        (void)tree.init( ic_domain, std::move( root_state ), t0 );
 
         std::vector< LeafSol > leafSol;
         if ( num_threads_ > 1 )
@@ -82,8 +86,7 @@ class AdsDriver
             driveSerial( rhs, tree, leafSol, t1 );
 
         tree.canonicalizeDone();
-        return AdsSolution< Stepper, M, DomainT >{ std::move( tree ), std::move( leafSol ), t0,
-                                                   t1 };
+        return AdsSolution< Stepper, DomainT >{ std::move( tree ), std::move( leafSol ), t0, t1 };
     }
 
    protected:
@@ -104,7 +107,7 @@ class AdsDriver
     // crit_, cfg_, extras_ (all const) and the passed-in rhs / inputs.
     template < class F >
     [[nodiscard]] LeafVerdict stepLeaf( const F& rhs, const State& payload, T tEntry, int depth,
-                                        const BoxT& box, T t1 ) const
+                                        T t1 ) const
     {
         SplitRequest< T > req;
         tax::ode::Integrator< Stepper, std::decay_t< F > > integ{ rhs, cfg_ };
@@ -144,7 +147,7 @@ class AdsDriver
             const int idx = tree.popFront();
             const auto& l = tree.leaf( idx );
 
-            LeafVerdict v = stepLeaf( rhs, l.payload, l.tEntry, l.depth, l.box, t1 );
+            LeafVerdict v = stepLeaf( rhs, l.payload, l.tEntry, l.depth, t1 );
 
             if ( static_cast< int >( leafSol.size() ) <= idx )
                 leafSol.resize( static_cast< std::size_t >( idx ) + 1 );
@@ -181,7 +184,6 @@ class AdsDriver
             State payload{};
             T tEntry{};
             int depth = 0;
-            BoxT box{};
         };
         // stepLeaf's verdict, tagged with the originating leaf index so apply()
         // can commit it without the item.
@@ -203,13 +205,11 @@ class AdsDriver
                 it.payload = std::move( tree.leaf( idx ).payload );
                 it.tEntry = tree.leaf( idx ).tEntry;
                 it.depth = tree.leaf( idx ).depth;
-                it.box = tree.leaf( idx ).box;
                 return it;
             },
             // process(): lock-free integration on the copied-out item.
             [&]( Item it ) -> Result {
-                return Result{ it.idx,
-                               stepLeaf( rhs, it.payload, it.tEntry, it.depth, it.box, t1 ) };
+                return Result{ it.idx, stepLeaf( rhs, it.payload, it.tEntry, it.depth, t1 ) };
             },
             // apply(): under lock — split or finalize, capture the per-leaf
             // Solution, and report whether work was enqueued (split → 2 leaves).

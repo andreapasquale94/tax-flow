@@ -8,10 +8,10 @@
 
 #include <cstddef>
 #include <string>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/solution.hpp>
 #include <tax/ads/tree.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/ode/solution.hpp>
@@ -21,10 +21,10 @@
 
 using tax::ads::AdsSolution;
 using tax::ads::AdsTree;
-using tax::ads::Box;
-using tax::ads::create;
 using tax::ads::kSnapshotLabel;
 using tax::ads::split;
+using tax::domain::Box;
+using tax::domain::create;
 using tax::ode::Verner89Stepper;
 
 namespace
@@ -35,9 +35,9 @@ constexpr int D = 2;
 using TE = tax::TE< P, M >;
 using DAState = tax::la::VecNT< D, TE >;
 using Stepper = Verner89Stepper< DAState >;
-using Tree = AdsTree< DAState, M, double >;
+using Tree = AdsTree< DAState, tax::domain::Box< double, M > >;
 using LeafSol = tax::ode::Solution< Stepper, DAState >;
-using Sol = AdsSolution< Stepper, M >;
+using Sol = AdsSolution< Stepper, tax::domain::Box< double, M > >;
 
 struct Built
 {
@@ -102,12 +102,12 @@ TEST( AdsSolution, SnapshotsBracketAndBucket )
     EXPECT_DOUBLE_EQ( snaps[2].time(), 1.0 );
     EXPECT_EQ( snaps[2].size(), 2u );
 
-    EXPECT_DOUBLE_EQ( snaps[0][0].box.center( 0 ), 0.0 );
-    EXPECT_DOUBLE_EQ( snaps[0][0].box.halfWidth( 0 ), 1.0 );
+    EXPECT_DOUBLE_EQ( snaps[0][0].domain.center( 0 ), 0.0 );
+    EXPECT_DOUBLE_EQ( snaps[0][0].domain.halfWidth( 0 ), 1.0 );
 
-    EXPECT_DOUBLE_EQ( snaps[1][0].box.center( 0 ), -0.5 );
-    EXPECT_DOUBLE_EQ( snaps[1][1].box.center( 0 ), 0.5 );
-    EXPECT_DOUBLE_EQ( snaps[1][0].box.halfWidth( 0 ), 0.5 );
+    EXPECT_DOUBLE_EQ( snaps[1][0].domain.center( 0 ), -0.5 );
+    EXPECT_DOUBLE_EQ( snaps[1][1].domain.center( 0 ), 0.5 );
+    EXPECT_DOUBLE_EQ( snaps[1][0].domain.halfWidth( 0 ), 0.5 );
     EXPECT_EQ( snaps[1][0].id, 0 );
     EXPECT_EQ( snaps[1][1].id, 1 );
 
@@ -127,7 +127,7 @@ TEST( AdsSolution, FinalMatchesLastSnapshot )
     ASSERT_EQ( snaps.back().size(), fin.size() );
     for ( std::size_t i = 0; i < fin.size(); ++i )
     {
-        EXPECT_DOUBLE_EQ( snaps.back()[i].box.center( 0 ), fin[i].box.center( 0 ) );
+        EXPECT_DOUBLE_EQ( snaps.back()[i].domain.center( 0 ), fin[i].domain.center( 0 ) );
         EXPECT_EQ( snaps.back()[i].id, fin[i].id );
     }
 }
@@ -174,6 +174,6 @@ TEST( AdsSolution, RetiredParentGridRecordIncluded )
     ASSERT_EQ( snaps.size(), 4u );  // t0(0.0), parent(0.2), children(0.5), t1(1.0)
     EXPECT_DOUBLE_EQ( snaps[1].time(), 0.2 );
     ASSERT_EQ( snaps[1].size(), 1u );
-    EXPECT_DOUBLE_EQ( snaps[1][0].box.center( 0 ), 0.0 );  // parent box, not a child
-    EXPECT_DOUBLE_EQ( snaps[1][0].box.halfWidth( 0 ), 1.0 );
+    EXPECT_DOUBLE_EQ( snaps[1][0].domain.center( 0 ), 0.0 );  // parent box, not a child
+    EXPECT_DOUBLE_EQ( snaps[1][0].domain.halfWidth( 0 ), 1.0 );
 }

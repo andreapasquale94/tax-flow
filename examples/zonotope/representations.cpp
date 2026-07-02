@@ -52,45 +52,20 @@ std::array< S, 2 > phi( const S& p, const S& q )
     return { p + 0.5 * q + 0.35 * q * q, q + 0.45 * p * p - 0.25 * p * q };
 }
 
-// Linear-zonotope frame of a 2-component DA map: centre = constant term,
-// generators J(i,j) = ∂out_i/∂ξ_j (the degree-1 coefficients).
-struct Frame
-{
-    V2 c;
-    tax::la::MatNT< 2, double > J;
-};
+// Linear-zonotope frame of a 2-component DA map — the library's
+// tax::domain::zonotopeFrame (centre = constant term, generators = degree-1
+// coefficients).
+using Frame = tax::domain::Zonotope< double, 2 >;
 
-Frame frameOf( const DAState& s )
-{
-    Frame f;
-    for ( int i = 0; i < 2; ++i )
-    {
-        f.c( i ) = s( i )[0];
-        for ( int j = 0; j < 2; ++j )
-        {
-            tax::MultiIndex< 2 > e{};
-            e[static_cast< std::size_t >( j )] = 1;
-            f.J( i, j ) = s( i )[tax::flatIndex< 2 >( e )];
-        }
-    }
-    return f;
-}
+Frame frameOf( const DAState& s ) { return tax::domain::zonotopeFrame( s ); }
 
-// Interval hull (axis-aligned box) of a polynomial zonotope over ξ ∈ [-1,1]²:
-// |ξ^α| ≤ 1, so the half-extent of component i is Σ_{α≠0} |c_α|.
+// Interval hull (axis-aligned box) of a polynomial zonotope over ξ ∈ [-1,1]²
+// via the library's tax::domain::intervalHull.
 std::array< double, 4 > boxHull( const DAState& s )
 {
-    std::array< double, 4 > lohi{};  // x_lo, x_hi, y_lo, y_hi
-    constexpr std::size_t Nc = tax::numMonomials( P, M );
-    for ( int i = 0; i < 2; ++i )
-    {
-        const double c0 = s( i )[0];
-        double rad = 0.0;
-        for ( std::size_t k = 1; k < Nc; ++k ) rad += std::abs( s( i )[k] );
-        lohi[static_cast< std::size_t >( 2 * i )] = c0 - rad;
-        lohi[static_cast< std::size_t >( 2 * i + 1 )] = c0 + rad;
-    }
-    return lohi;
+    const auto hull = tax::domain::intervalHull( s );
+    return { hull.center( 0 ) - hull.halfWidth( 0 ), hull.center( 0 ) + hull.halfWidth( 0 ),
+             hull.center( 1 ) - hull.halfWidth( 1 ), hull.center( 1 ) + hull.halfWidth( 1 ) };
 }
 
 // Emit a polygon (closed boundary curve) for a DA map over the unit-square
@@ -113,9 +88,9 @@ void writeFrames( std::ostream& out, const std::vector< Frame >& frames )
     for ( std::size_t i = 0; i < frames.size(); ++i )
     {
         const auto& f = frames[i];
-        out << "{ \"c\": [" << f.c( 0 ) << ", " << f.c( 1 ) << "], \"J\": [" << f.J( 0, 0 ) << ", "
-            << f.J( 0, 1 ) << ", " << f.J( 1, 0 ) << ", " << f.J( 1, 1 ) << "] }"
-            << ( i + 1 < frames.size() ? ", " : "" );
+        out << "{ \"c\": [" << f.center( 0 ) << ", " << f.center( 1 ) << "], \"J\": ["
+            << f.generators( 0, 0 ) << ", " << f.generators( 0, 1 ) << ", " << f.generators( 1, 0 )
+            << ", " << f.generators( 1, 1 ) << "] }" << ( i + 1 < frames.size() ? ", " : "" );
     }
     out << ']';
 }
@@ -125,10 +100,10 @@ int main()
 {
     // Identity DA state on the box ξ ∈ [-1,1]² with physical half-widths
     // (1.0, 0.6): the polynomial zonotope of the *identity* set.
-    tax::ads::Zonotope< double, M > dom;
+    tax::domain::Zonotope< double, M > dom;
     dom.center = V2{ 0.0, 0.0 };
     dom.generators = ( tax::la::VecNT< 2, double >{ 1.0, 0.6 } ).asDiagonal();
-    DAState id = tax::ads::create< P, M >( dom, V2{ 0.0, 0.0 } );
+    DAState id = tax::domain::create< P, M >( dom, V2{ 0.0, 0.0 } );
 
     // Push the identity through φ → polynomial zonotope of φ(box).
     auto img = phi( id( 0 ), id( 1 ) );
@@ -194,9 +169,9 @@ int main()
     example::writeJsonArray( out, mc_y );
     out << " },\n";
     out << "  \"box\": [" << box[0] << ", " << box[1] << ", " << box[2] << ", " << box[3] << "],\n";
-    out << "  \"zonotope\": { \"c\": [" << zono.c( 0 ) << ", " << zono.c( 1 ) << "], \"J\": ["
-        << zono.J( 0, 0 ) << ", " << zono.J( 0, 1 ) << ", " << zono.J( 1, 0 ) << ", "
-        << zono.J( 1, 1 ) << "] },\n";
+    out << "  \"zonotope\": { \"c\": [" << zono.center( 0 ) << ", " << zono.center( 1 )
+        << "], \"J\": [" << zono.generators( 0, 0 ) << ", " << zono.generators( 0, 1 ) << ", "
+        << zono.generators( 1, 0 ) << ", " << zono.generators( 1, 1 ) << "] },\n";
     out << "  \"poly_zonotope\": { \"x\": ";
     example::writeJsonArray( out, outline.x );
     out << ", \"y\": ";

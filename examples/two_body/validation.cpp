@@ -44,7 +44,7 @@ namespace
 {
 
 using Vec4 = tax::la::VecNT< 4, double >;
-using BoxT = tax::ads::Box< double, 4 >;
+using BoxT = tax::domain::Box< double, 4 >;
 using namespace example::two_body;
 using namespace tax::ode::methods;
 
@@ -52,52 +52,6 @@ constexpr int kNOrbits = 1;
 constexpr int kNSnaps = 9;  // every 45 degrees including t = 0
 constexpr int kNMc = 200;
 constexpr int kNPerEdge = 24;
-
-// ---- Map IC sample to a leaf-local point in [-1, 1]^M --------------------
-//
-// For axes with zero half-width the local coord is fixed at 0 (the box
-// is degenerate along that axis and the polynomial does not depend on
-// it).
-inline std::array< double, 4 > toLocal( const Vec4& ic, const BoxT& box )
-{
-    std::array< double, 4 > out{};
-    for ( int j = 0; j < 4; ++j )
-    {
-        out[static_cast< std::size_t >( j )] =
-            box.halfWidth( j ) > 0.0 ? ( ic( j ) - box.center( j ) ) / box.halfWidth( j ) : 0.0;
-    }
-    return out;
-}
-
-// ---- Compute max + RMS position error of a constructed flow against MC ---
-//
-// `state_at_t` is the propagated DA state (Vec<4, TE<P, M>>). The leaf
-// box is used to convert from MC IC coords to leaf-local coords.
-template < class DAState >
-std::pair< double, double > posErrors( const DAState& state_at_t, const BoxT& leaf_box,
-                                       const std::vector< Vec4 >& mc_ic,
-                                       const std::vector< Vec4 >& mc_truth_at_t,
-                                       const std::vector< int >& mc_leaf_id, int this_leaf_id )
-{
-    double sum_sq = 0.0;
-    double max_e = 0.0;
-    int n = 0;
-    for ( std::size_t i = 0; i < mc_ic.size(); ++i )
-    {
-        if ( mc_leaf_id[i] != this_leaf_id ) continue;
-        const auto d = toLocal( mc_ic[i], leaf_box );
-        const double px = state_at_t( 0 ).eval( d );
-        const double py = state_at_t( 1 ).eval( d );
-        const double ex = px - mc_truth_at_t[i]( 0 );
-        const double ey = py - mc_truth_at_t[i]( 1 );
-        const double e = std::sqrt( ex * ex + ey * ey );
-        sum_sq += e * e;
-        max_e = std::max( max_e, e );
-        ++n;
-    }
-    if ( n == 0 ) return { 0.0, 0.0 };
-    return { max_e, std::sqrt( sum_sq / static_cast< double >( n ) ) };
-}
 
 // ---- A single sweep cell -------------------------------------------------
 struct Cell
@@ -120,7 +74,7 @@ Cell runTaylor( const BoxT& ic_box, const std::vector< Vec4 >& mc_ic,
     using TE = tax::TE< P, 4 >;
     using DAState = tax::la::VecNT< 4, TE >;
 
-    DAState x0 = tax::ads::create< P, 4 >( ic_box, icCenter() );
+    DAState x0 = tax::domain::create< P, 4 >( ic_box, icCenter() );
     const auto t0 = std::chrono::high_resolution_clock::now();
     auto sol = tax::ode::propagate( Verner89{}, rhs(), x0, 0.0, tFinal, cfg );
     const auto t1 = std::chrono::high_resolution_clock::now();
@@ -130,7 +84,7 @@ Cell runTaylor( const BoxT& ic_box, const std::vector< Vec4 >& mc_ic,
     double sum_sq = 0.0, max_e = 0.0;
     for ( std::size_t i = 0; i < mc_ic.size(); ++i )
     {
-        const auto d = toLocal( mc_ic[i], ic_box );
+        const auto d = ic_box.localize( mc_ic[i] );
         const double px = xT( 0 ).eval( d );
         const double py = xT( 1 ).eval( d );
         const double ex = px - mc_truth_final[i]( 0 );
@@ -152,43 +106,26 @@ Cell runAdsLike( std::string name, Criterion crit, const BoxT& ic_box,
     const double tol = crit.tol;
 
     const auto t0 = std::chrono::high_resolution_clock::now();
-    auto tree =
-        tax::ads::propagate< P >( Verner89{}, crit, rhs(), ic_box, icCenter(), 0.0, tFinal, cfg )
-            .tree();
+    auto sol =
+        tax::ads::propagate< P >( Verner89{}, crit, rhs(), ic_box, icCenter(), 0.0, tFinal, cfg );
     const auto t1 = std::chrono::high_resolution_clock::now();
     const double ms = std::chrono::duration< double, std::milli >( t1 - t0 ).count();
+    const auto& tree = sol.tree();
 
-    // Assign each MC IC to its containing leaf.
-    std::vector< int > mc_leaf( mc_ic.size(), -1 );
-    for ( std::size_t i = 0; i < mc_ic.size(); ++i )
-    {
-        const auto idx = tree.locate( mc_ic[i] );
-        if ( idx.has_value() ) mc_leaf[i] = *idx;
-    }
-
+    // Evaluate the piecewise-polynomial flow map at each MC IC: exact leaf
+    // location + factor recovery + payload evaluation in one library call.
     double sum_sq = 0.0, max_e = 0.0;
     int n_used = 0;
-    for ( int li : tree.done() )
+    for ( std::size_t i = 0; i < mc_ic.size(); ++i )
     {
-        const auto& leaf = tree.leaf( li );
-        const auto [leaf_max, leaf_rms] =
-            posErrors( leaf.payload, leaf.box, mc_ic, mc_truth_final, mc_leaf, li );
-        // Recount sum_sq / max_e by re-walking
-        for ( std::size_t i = 0; i < mc_ic.size(); ++i )
-        {
-            if ( mc_leaf[i] != li ) continue;
-            const auto d = toLocal( mc_ic[i], leaf.box );
-            const double px = leaf.payload( 0 ).eval( d );
-            const double py = leaf.payload( 1 ).eval( d );
-            const double ex = px - mc_truth_final[i]( 0 );
-            const double ey = py - mc_truth_final[i]( 1 );
-            const double e = std::sqrt( ex * ex + ey * ey );
-            sum_sq += e * e;
-            max_e = std::max( max_e, e );
-            ++n_used;
-        }
-        (void)leaf_max;
-        (void)leaf_rms;
+        const auto pred = sol.evaluate( mc_ic[i] );
+        if ( !pred.has_value() ) continue;
+        const double ex = ( *pred )( 0 ) - mc_truth_final[i]( 0 );
+        const double ey = ( *pred )( 1 ) - mc_truth_final[i]( 1 );
+        const double e = std::sqrt( ex * ex + ey * ey );
+        sum_sq += e * e;
+        max_e = std::max( max_e, e );
+        ++n_used;
     }
     const double rms = n_used > 0 ? std::sqrt( sum_sq / static_cast< double >( n_used ) ) : 0.0;
     return { name, P, tol, static_cast< int >( tree.done().size() ), max_e, rms, ms };
@@ -407,8 +344,7 @@ int main()
     for ( std::size_t i = 0; i < cells.size(); ++i )
     {
         const auto& c = cells[i];
-        out << "    { \"method\": \"" << c.method << "\""
-            << ", \"P\": " << c.P << ", \"tol\": "
+        out << "    { \"method\": \"" << c.method << "\"" << ", \"P\": " << c.P << ", \"tol\": "
             << ( std::isnan( c.tol ) ? std::string( "null" ) : std::to_string( c.tol ) )
             << ", \"n_leaves\": " << c.n_leaves << ", \"max_pos_err\": " << c.max_pos_err
             << ", \"rms_pos_err\": " << c.rms_pos_err << ", \"elapsed_ms\": " << c.elapsed_ms
@@ -429,13 +365,10 @@ int main()
     printBanner( "validation", rows );
 
     // Compact table of (method, P, tol) → error + timing.
-    std::cout << "  " << std::left << std::setw( 7 ) << "method"
-              << "  " << std::setw( 3 ) << "P"
-              << "  " << std::setw( 10 ) << "tol"
-              << "  " << std::setw( 5 ) << "leafs"
-              << "  " << std::setw( 11 ) << "max err"
-              << "  " << std::setw( 11 ) << "rms err"
-              << "  " << std::setw( 10 ) << "elapsed" << '\n';
+    std::cout << "  " << std::left << std::setw( 7 ) << "method" << "  " << std::setw( 3 ) << "P"
+              << "  " << std::setw( 10 ) << "tol" << "  " << std::setw( 5 ) << "leafs" << "  "
+              << std::setw( 11 ) << "max err" << "  " << std::setw( 11 ) << "rms err" << "  "
+              << std::setw( 10 ) << "elapsed" << '\n';
     std::cout << "  " << std::string( 7 + 2 + 3 + 2 + 10 + 2 + 5 + 2 + 11 + 2 + 11 + 2 + 10, '-' )
               << '\n';
     for ( const auto& c : cells )

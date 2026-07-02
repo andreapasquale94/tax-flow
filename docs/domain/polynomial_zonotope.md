@@ -17,19 +17,19 @@ respectively).
 
 ## Tiered Domain interface
 
-The module exposes two concept tiers (`include/tax/ads/domains/domain.hpp`):
+The module exposes two concept tiers (`include/tax/domain/domain.hpp`):
 
 | Concept | Required operations | Models |
 |---------|---------------------|--------|
-| `Domain` | `center(dim)`, `split(dim)`, `domain_traits<D>::scalar`, `domain_traits<D>::dim` | `Box`, `Zonotope`, `PolynomialZonotope` |
-| `LocatableDomain` | `Domain` + `splitOrdinate(dim)` (exact affine inversion) | `Box`, `Zonotope` |
+| `Domain` | `center(dim)`, `split(dim)`, `denormalize(ξ)`, `domain_traits<D>` | `Box`, `Zonotope`, `PolynomialZonotope` |
+| `LocatableDomain` | `Domain` + `localize(pt)`, `contains(pt)`, `splitOrdinate(dim)` (exact inversion) | `Box`, `Zonotope` |
 
 `PolynomialZonotope` models `Domain` but **not** `LocatableDomain`:
 
 - **`propagate` / `AdsDriver`** require only `Domain` — they drive any of the
   three primitives without change.
-- **`merge`** requires `LocatableDomain` (needs `splitOrdinate` for sibling
-  ordering) and is disabled for `PolynomialZonotope` at compile time.
+- **`merge`**, **`AdsTree::locate`/`locateFactors`** and **`evaluate`** require
+  `LocatableDomain` and are disabled for `PolynomialZonotope` at compile time.
 - **`contains`** on a `PolynomialZonotope` is a **conservative
   over-approximation** (a bounding-box test on each component's range). It may
   return `true` for a point slightly outside the curved set. For exact membership
@@ -45,8 +45,8 @@ The module exposes two concept tiers (`include/tax/ads/domains/domain.hpp`):
 using namespace tax::ode::methods;
 
 // Build a degree-N poly zonotope from an axis-aligned box of ICs:
-tax::ads::Box<double, 2> ic_box{ center_vec, half_width_vec };
-auto ic = tax::ads::PolynomialZonotope<double, /*N=*/6, /*M=*/2>::fromBox(ic_box);
+tax::domain::Box<double, 2> ic_box{ center_vec, half_width_vec };
+auto ic = tax::domain::PolynomialZonotope<double, /*N=*/6, /*M=*/2>::fromBox(ic_box);
 // (or construct ic.value directly from any polynomial expressions over ξ)
 
 auto sol = tax::ads::propagate</*P=*/6>(
@@ -56,7 +56,7 @@ auto sol = tax::ads::propagate</*P=*/6>(
 const auto& tree = sol.tree();
 for (int i : tree.done()) {
     const auto& leaf = tree.leaf(i);
-    // leaf.box is the leaf's PolynomialZonotope;
+    // leaf.domain is the leaf's PolynomialZonotope;
     // evaluate leaf.payload(ξ) for a factor vector ξ ∈ [-1, 1]^M.
 }
 ```

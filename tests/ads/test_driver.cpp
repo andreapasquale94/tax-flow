@@ -11,10 +11,10 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/driver.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/ode/event.hpp>
@@ -22,8 +22,8 @@
 #include <utility>
 
 using tax::ads::AdsDriver;
-using tax::ads::Box;
 using tax::ads::TruncationCriterion;
+using tax::domain::Box;
 using tax::ode::IntegratorConfig;
 using tax::ode::Verner89Stepper;
 
@@ -98,7 +98,7 @@ TEST( AdsDriver, MildlyNonlinearOscillatorMatchesReference )
         std::array< double, M > xi_local{};
         for ( int j = 0; j < M; ++j )
             xi_local[static_cast< std::size_t >( j )] =
-                ( xi( j ) - leaf.box.center( j ) ) / leaf.box.halfWidth( j );
+                ( xi( j ) - leaf.domain.center( j ) ) / leaf.domain.halfWidth( j );
 
         ScState x_predicted;
         for ( int row = 0; row < D; ++row )

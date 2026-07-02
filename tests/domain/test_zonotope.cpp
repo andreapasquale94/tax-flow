@@ -14,25 +14,26 @@
 #include <cstddef>
 #include <iostream>
 #include <tax/ads/da_state.hpp>
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/domains/zonotope.hpp>
 #include <tax/ads/merge.hpp>
 #include <tax/ads/propagate.hpp>
 #include <tax/ads/split_criteria.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
-using tax::ads::Box;
 using tax::ads::TruncationCriterion;
-using tax::ads::Zonotope;
+using tax::domain::Box;
+using tax::domain::Zonotope;
 using tax::ode::IntegratorConfig;
 
 // Permanent compile-time guards: Zonotope must model both domain tiers.
-static_assert( tax::ads::Domain< tax::ads::Zonotope< double, 2 > >, "Zonotope must model Domain" );
-static_assert( tax::ads::LocatableDomain< tax::ads::Zonotope< double, 2 > >,
+static_assert( tax::domain::Domain< tax::domain::Zonotope< double, 2 > >,
+               "Zonotope must model Domain" );
+static_assert( tax::domain::LocatableDomain< tax::domain::Zonotope< double, 2 > >,
                "Zonotope must model LocatableDomain" );
 
 namespace
@@ -178,7 +179,7 @@ TEST( Zonotope, CreateSeedsGeneratorColumns )
 {
     auto z = orientedThinZonotope();
     V2 x0{ 1.0, 0.0 };
-    DAState state = tax::ads::create< P, M >( z, x0 );
+    DAState state = tax::domain::create< P, M >( z, x0 );
 
     for ( int i = 0; i < D; ++i )
     {
@@ -233,7 +234,7 @@ TEST( Zonotope, PropagateMatchesReference )
 
         // Leaf-local factor coordinates: ξ_local = G_leaf⁻¹ (phys - c_leaf).
         const V2 xi_local_v =
-            leaf.box.generators.partialPivLu().solve( V2{ phys - leaf.box.center } );
+            leaf.domain.generators.partialPivLu().solve( V2{ phys - leaf.domain.center } );
         std::array< double, M > xi_local{ xi_local_v( 0 ), xi_local_v( 1 ) };
 
         const ScState x_pred = evalPayload( leaf.payload, xi_local );
@@ -313,7 +314,7 @@ TEST( Zonotope, SplitThenMergeRoundTrip )
         const auto& leaf = tree.leaf( *idx );
 
         const V2 xi_local_v =
-            leaf.box.generators.partialPivLu().solve( V2{ phys - leaf.box.center } );
+            leaf.domain.generators.partialPivLu().solve( V2{ phys - leaf.domain.center } );
         const ScState x_pred = evalPayload(
             leaf.payload, std::array< double, M >{ xi_local_v( 0 ), xi_local_v( 1 ) } );
 

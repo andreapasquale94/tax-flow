@@ -16,7 +16,7 @@ ODE [event system](../ode/events.md).
 #include <tax/ode.hpp>
 using namespace tax::ode::methods;
 
-tax::ads::Box<double, 2> ic_box{ center, half_width };
+tax::domain::Box<double, 2> ic_box{ center, half_width };
 
 auto sol = tax::ads::propagate</*P=*/6>(
     Verner89{},
@@ -26,7 +26,7 @@ auto sol = tax::ads::propagate</*P=*/6>(
 const auto& tree = sol.tree();
 for ( int li : tree.done() )
 {
-    const auto& leaf = tree.leaf( li );   // leaf.box, leaf.depth, leaf.payload
+    const auto& leaf = tree.leaf( li );   // leaf.domain, leaf.depth, leaf.payload
 }
 ```
 
@@ -60,8 +60,8 @@ to buy a propagation pattern with no time-ordering constraints — see the
 |---|---|
 | [API Reference](api.md) | Domain interface, `Box`, `Zonotope`, `PolynomialZonotope`, `reorient`, `AdsTree`, criteria, `propagate`, `refine`, `merge` |
 | [Refinement](refine.md) | The propagate-then-assess driver, quality indices, multi-way splitting, parallelism |
-| [Zonotope](zonotope.md) | Oriented parallelotope domain — fewer leaves on anisotropic problems |
-| [PolynomialZonotope](polynomial_zonotope.md) | Curved-IC domain + the tiered `Domain`/`LocatableDomain` interface |
+| [Zonotope](../domain/zonotope.md) | Oriented parallelotope domain — fewer leaves on anisotropic problems |
+| [PolynomialZonotope](../domain/polynomial_zonotope.md) | Curved-IC domain + the tiered `Domain`/`LocatableDomain` interface |
 
 See also the worked tutorials:
 [Two-Body Problem](../tutorials/two_body.md) (classic ADS / LOADS) and
@@ -77,21 +77,23 @@ owns. Two concept tiers gate which features a domain can access:
 | Concept | Key operations | Models |
 |---------|---------------|--------|
 | `Domain` | `center(dim)`, `split(dim)`, `domain_traits` | `Box`, `Zonotope`, `PolynomialZonotope` |
-| `LocatableDomain` | `Domain` + `splitOrdinate(dim)` | `Box`, `Zonotope` |
+| `LocatableDomain` | `Domain` + `localize` / `contains` / `splitOrdinate` | `Box`, `Zonotope` |
 
-`propagate` and `AdsDriver` require only `Domain`. `merge` requires
-`LocatableDomain` (exact sibling ordering). `PolynomialZonotope` models `Domain`
-but not `LocatableDomain`; its `contains` is a conservative over-approximation.
+`propagate` and `AdsDriver` require only `Domain`. `merge` and point location
+(`locate`/`locateFactors`/`evaluate`) require `LocatableDomain`.
+`PolynomialZonotope` models `Domain` but not `LocatableDomain`. The primitives
+and the enclosure/query layer are documented in the
+[`tax::domain` module](../domain/index.md).
 
 | Primitive | Header | Notes |
 |-----------|--------|-------|
-| `Box<T, M>` | `tax/ads/domains/box.hpp` | axis-aligned hyperrectangle; the default |
-| `Zonotope<T, M>` | `tax/ads/domains/zonotope.hpp` | parallelotope (full `M×M` generator matrix) |
-| `PolynomialZonotope<T,N,M>` | `tax/ads/domains/polynomial_zonotope.hpp` | polynomial image of the cube (curved IC) |
+| `Box<T, M>` | `tax/domain/box.hpp` | axis-aligned hyperrectangle; the default |
+| `Zonotope<T, M>` | `tax/domain/zonotope.hpp` | parallelotope (full `M×M` generator matrix) |
+| `PolynomialZonotope<T,N,M>` | `tax/domain/polynomial_zonotope.hpp` | polynomial image of the cube (curved IC) |
 
-`include/tax/ads/domains/reorient.hpp` provides `reorientState`, `linearPart`,
+`include/tax/domain/reorient.hpp` provides `reorientState`, `linearPart`,
 `flowAlignedRotation`, and `reorientZonotope` — building blocks for adaptive
-frame alignment (see [Zonotope](zonotope.md)).
+frame alignment (see [Zonotope](../domain/zonotope.md)).
 
 ---
 
@@ -102,9 +104,9 @@ frame alignment (see [Zonotope](zonotope.md)).
 | `Box<T, M>` | axis-aligned IC hyperrectangle: `center`, `halfWidth` |
 | `Zonotope<T, M>` | parallelotope IC domain: `center`, `generators` (M×M) |
 | `PolynomialZonotope<T,N,M>` | polynomial-image IC domain: `value[i](ξ)` |
-| `Leaf<Payload, M, T, Domain>` | one arena record: a domain, a `Payload`, tree links and metadata |
-| `AdsTree<Payload, M, T, Domain>` | leaf-only arena tree with a BFS work queue |
-| `AdsSolution<Stepper, M>` | result of `propagate`: wraps `AdsTree` + per-leaf ODE `Solution`s |
+| `Leaf<Payload, Domain>` | one arena record: a domain, a `Payload`, tree links and metadata |
+| `AdsTree<Payload, Domain>` | leaf-only arena tree with a BFS work queue |
+| `AdsSolution<Stepper, Domain>` | result of `propagate`: wraps `AdsTree` + per-leaf ODE `Solution`s; `evaluate(pt)` |
 | `SplitCriterion` | in-flight split test for `propagate` (`shouldSplit`, `splitDim`) |
 | `QualityCriterion` | parent-vs-children test for `refine` (`acceptable`, `splitDim`) |
 
@@ -134,14 +136,10 @@ state dimension.
 
 | Header | Contents |
 |---|---|
-| `tax/ads/domains/domain.hpp` | `Domain`, `LocatableDomain` concepts; `domain_traits` |
-| `tax/ads/domains/box.hpp` | `Box<T, M>` |
-| `tax/ads/domains/zonotope.hpp` | `Zonotope<T, M>` |
-| `tax/ads/domains/polynomial_zonotope.hpp` | `PolynomialZonotope<T, N, M>` |
-| `tax/ads/domains/reorient.hpp` | `reorientState`, `linearPart`, `flowAlignedRotation`, `reorientZonotope` |
-| `tax/ads/leaf.hpp` | `Leaf<Payload, M, T, Domain>` |
-| `tax/ads/tree.hpp` | `AdsTree<Payload, M, T, Domain>` |
-| `tax/ads/da_state.hpp` | `create`, `split` (DA-state identity & re-identification) |
+| `tax/domain.hpp` | the [domain module](../domain/index.md): primitives, concepts, `create`, enclosures |
+| `tax/ads/leaf.hpp` | `Leaf<Payload, Domain>` |
+| `tax/ads/tree.hpp` | `AdsTree<Payload, Domain>` |
+| `tax/ads/da_state.hpp` | `split` (DA-state re-identification on the halves) |
 | `tax/ads/split_criteria.hpp` | `SplitCriterion`, `TruncationCriterion`, `NliCriterion` |
 | `tax/ads/split_event.hpp` | `SplitRequest`, `SplitEvent` |
 | `tax/ads/driver.hpp` | `AdsDriver<Stepper, Criterion>` |

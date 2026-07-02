@@ -60,7 +60,7 @@ int main()
     // The t = 0 "polygon" is the image of the IC-set boundary under the
     // identity flow map — for the zonotope that is exactly its oriented face.
     const auto boundary = unitSquareBoundary( kNPerEdge );
-    const auto zono_identity = tax::ads::create< P, M >( ic_zono, icCenter() );
+    const auto zono_identity = tax::domain::create< P, M >( ic_zono, icCenter() );
 
     // ---- One ADS propagation per snapshot time, for both domains -------------
     std::vector< Snapshot > zono_snaps;

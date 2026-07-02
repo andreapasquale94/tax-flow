@@ -45,7 +45,7 @@ int main()
     // *curved*: we add a small ξ₁² term to the y-component (value[1]), which
     // bends the y boundary of the initial set into a parabola.  The coefficient
     // is kept to 10 % of the linear half-width so the set stays close to the box.
-    auto pz = tax::ads::PolynomialZonotope< double, P, M >::fromBox( icBox() );
+    auto pz = tax::domain::PolynomialZonotope< double, P, M >::fromBox( icBox() );
     {
         // Monomial ξ₁² in value[1] (the y-position component).
         tax::MultiIndex< M > a{};

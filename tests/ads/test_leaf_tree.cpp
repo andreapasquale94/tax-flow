@@ -1,21 +1,21 @@
 // tests/ads/test_leaf_tree.cpp
 //
-// AdsTree<Payload, M, T> — arena layout, BFS work queue, sibling links,
+// AdsTree<Payload, Domain> — arena layout, BFS work queue, sibling links,
 // point-lookup linear scan, sibling merge.
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/tree.hpp>
+#include <tax/domain/box.hpp>
 
 using tax::ads::AdsTree;
-using tax::ads::Box;
 using tax::ads::Leaf;
+using tax::domain::Box;
 
 namespace
 {
-using Tree = AdsTree< int, 2, double >;  // Payload = int (cheap to copy)
+using Tree = AdsTree< int, tax::domain::Box< double, 2 > >;  // Payload = int (cheap to copy)
 using BoxT = Box< double, 2 >;
 using V2 = tax::la::VecNT< 2, double >;
 
@@ -144,9 +144,9 @@ TEST( AdsTree, MergeRevivesParent )
 TEST( AdsTree, CanonicalizeDoneSortsByBoxCenter )
 {
     // M=1 tree of doubles. Root box center 0, halfWidth 1.
-    tax::ads::AdsTree< double, 1, double > tree;
-    tax::ads::Box< double, 1 > root{ tax::la::VecNT< 1, double >{ 0.0 },
-                                     tax::la::VecNT< 1, double >{ 1.0 } };
+    tax::ads::AdsTree< double, tax::domain::Box< double, 1 > > tree;
+    tax::domain::Box< double, 1 > root{ tax::la::VecNT< 1, double >{ 0.0 },
+                                        tax::la::VecNT< 1, double >{ 1.0 } };
     const int r = tree.init( root, 0.0 );
 
     // Split root on dim 0 -> children centered at -0.5 and +0.5.
@@ -159,13 +159,13 @@ TEST( AdsTree, CanonicalizeDoneSortsByBoxCenter )
     auto before = tree.done();
     ASSERT_EQ( before.size(), 2u );
     // Insertion order: right (+0.5) then left (-0.5).
-    EXPECT_GT( tree.leaf( before[0] ).box.center( 0 ), 0.0 );
+    EXPECT_GT( tree.leaf( before[0] ).domain.center( 0 ), 0.0 );
 
     tree.canonicalizeDone();
 
     auto after = tree.done();
     ASSERT_EQ( after.size(), 2u );
     // Canonical order: ascending center, so left (-0.5) first.
-    EXPECT_LT( tree.leaf( after[0] ).box.center( 0 ), 0.0 );
-    EXPECT_GT( tree.leaf( after[1] ).box.center( 0 ), 0.0 );
+    EXPECT_LT( tree.leaf( after[0] ).domain.center( 0 ), 0.0 );
+    EXPECT_GT( tree.leaf( after[1] ).domain.center( 0 ), 0.0 );
 }

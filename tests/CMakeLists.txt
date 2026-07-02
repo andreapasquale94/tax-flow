@@ -18,11 +18,15 @@ function(tax_add_test name)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+# Domain module
+tax_add_test(test_domain_box SOURCES domain/test_box.cpp)
+tax_add_test(test_domain_zonotope SOURCES domain/test_zonotope.cpp)
+tax_add_test(test_domain_reorient SOURCES domain/test_reorient.cpp)
+tax_add_test(test_domain_polynomial_zonotope SOURCES domain/test_polynomial_zonotope.cpp)
+tax_add_test(test_domain_enclosure SOURCES domain/test_enclosure.cpp)
+tax_add_test(test_domain_localize_evaluate SOURCES domain/test_localize_evaluate.cpp)
+
 # ADS
-tax_add_test(test_ads_box SOURCES ads/test_box.cpp)
-tax_add_test(test_ads_zonotope SOURCES ads/test_zonotope.cpp)
-tax_add_test(test_ads_reorient SOURCES ads/test_reorient.cpp)
-tax_add_test(test_ads_polynomial_zonotope SOURCES ads/test_polynomial_zonotope.cpp)
 tax_add_test(test_ads_leaf_tree SOURCES ads/test_leaf_tree.cpp)
 tax_add_test(test_ads_nonlinearity_index SOURCES ads/test_nonlinearity_index.cpp)
 tax_add_test(test_ads_criteria SOURCES ads/test_criteria.cpp)

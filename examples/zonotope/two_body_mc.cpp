@@ -67,26 +67,12 @@ Mat2 activeBlock( const Mat4& A )
     B << A( kAy, kAy ), A( kAy, kAv ), A( kAv, kAy ), A( kAv, kAv );
     return B;
 }
-tax::ads::Zonotope< double, 4 > zonoFrom( const Mat2& B )
+tax::domain::Zonotope< double, 4 > zonoFrom( const Mat2& B )
 {
-    tax::ads::Zonotope< double, 4 > z;
+    tax::domain::Zonotope< double, 4 > z;
     z.center = icCenter();
     z.generators = embed( B );
     return z;
-}
-
-// The (y, v_y) generator block + centre of a leaf domain (Box or Zonotope),
-// used to recover leaf-local factor coordinates without touching the singular
-// pinned (x, v_x) axes.
-std::pair< Mat2, V2 > leafBlock( const tax::ads::Box< double, 4 >& b )
-{
-    Mat2 B;
-    B << b.halfWidth( kAy ), 0.0, 0.0, b.halfWidth( kAv );
-    return { B, V2{ b.center( kAy ), b.center( kAv ) } };
-}
-std::pair< Mat2, V2 > leafBlock( const tax::ads::Zonotope< double, 4 >& z )
-{
-    return { activeBlock( z.generators ), V2{ z.center( kAy ), z.center( kAv ) } };
 }
 
 tax::ode::IntegratorConfig< double > fastCfg()
@@ -104,33 +90,16 @@ V2 truthXY( const Vec4& ic, double t_final )
     return V2{ sol.x.back()( 0 ), sol.x.back()( 1 ) };
 }
 
-// Locate the leaf containing `ic` (by leaf-local |ξ_active|∞ ≤ 1) and evaluate
-// its flow map → predicted (x, y). nullopt if no leaf claims the point.
+// Locate the leaf containing `ic` and evaluate its flow map → predicted
+// (x, y). The library's locateFactors recovers exact leaf-local factors even
+// on the rank-deficient pinned (x, v_x) axes. nullopt if no leaf claims ic.
 template < class Tree >
 std::optional< V2 > predictXY( const Tree& tree, const Vec4& ic )
 {
-    const V2 icAct{ ic( kAy ), ic( kAv ) };
-    double best = 1e30;
-    const DAState* bestPayload = nullptr;
-    V2 bestXi;
-    for ( int li : tree.done() )
-    {
-        const auto& leaf = tree.leaf( li );
-        auto [B, c] = leafBlock( leaf.box );
-        const V2 xi = B.partialPivLu().solve( V2{ icAct - c } );
-        const double inf = xi.cwiseAbs().maxCoeff();
-        if ( inf < best )
-        {
-            best = inf;
-            bestXi = xi;
-            bestPayload = &leaf.payload;
-        }
-    }
-    if ( bestPayload == nullptr || best > 1.0 + 1e-6 ) return std::nullopt;
-    Vec4 d = Vec4::Zero();
-    d( kAy ) = bestXi( 0 );
-    d( kAv ) = bestXi( 1 );
-    return V2{ ( *bestPayload )( 0 ).eval( d ), ( *bestPayload )( 1 ).eval( d ) };
+    const auto loc = tree.locateFactors( ic );
+    if ( !loc ) return std::nullopt;
+    const auto& payload = tree.leaf( loc->idx ).payload;
+    return V2{ payload( 0 ).eval( loc->xi ), payload( 1 ).eval( loc->xi ) };
 }
 
 struct DomainResult
@@ -305,8 +274,8 @@ int main()
                                       zonoFrom( L ), icCenter(), 0.0, tB, fastCfg() );
         const auto& probe_tree = probe.tree();
         const Mat2 PhiL = activeBlock(
-            tax::ads::linearPart( probe_tree.leaf( probe_tree.done().front() ).payload ) );
-        const Mat2 V = tax::ads::flowAlignedRotation( PhiL );
+            tax::domain::linearPart( probe_tree.leaf( probe_tree.done().front() ).payload ) );
+        const Mat2 V = tax::domain::flowAlignedRotation( PhiL );
         const Mat2 LV = L * V;
 
         // MC over the 1σ ellipsoid: u uniform in the unit disk, ic = center + L·u.
@@ -326,10 +295,10 @@ int main()
             truth.push_back( truthXY( ic, tB ) );
         }
 
-        Vec4 box_hw = Vec4::Zero();
-        box_hw( kAy ) = L.row( 0 ).norm();
-        box_hw( kAv ) = L.row( 1 ).norm();
-        const tax::ads::Box< double, 4 > box{ icCenter(), box_hw };
+        // Exact interval hull of the covariance ellipsoid (L2 row norms).
+        const tax::domain::Box< double, 4 > box =
+            tax::domain::ellipsoidIntervalHull( icCenter(), embed( L ) );
+        const Vec4& box_hw = box.halfWidth;
 
         std::vector< DomainResult > doms;
         doms.push_back( scoreDomain( "bounding box", "box", { box_hw( kAy ), box_hw( kAv ), 0, 0 },

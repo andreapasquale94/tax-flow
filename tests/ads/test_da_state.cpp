@@ -7,16 +7,16 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
-using tax::ads::Box;
-using tax::ads::create;
 using tax::ads::split;
+using tax::domain::Box;
+using tax::domain::create;
 
 namespace
 {

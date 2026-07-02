@@ -7,19 +7,19 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/driver.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
 using tax::ads::AdsDriver;
-using tax::ads::Box;
 using tax::ads::TruncationCriterion;
+using tax::domain::Box;
 using tax::ode::IntegratorConfig;
 using tax::ode::Verner89Stepper;
 
@@ -32,7 +32,7 @@ constexpr int D = 2;
 using TE = tax::TE< P, M >;
 using DAState = tax::la::VecNT< D, TE >;
 using Stepper = Verner89Stepper< DAState >;
-using Tree = tax::ads::AdsTree< DAState, M, double >;
+using Tree = tax::ads::AdsTree< DAState, tax::domain::Box< double, M > >;
 
 auto rhs()
 {
@@ -73,8 +73,8 @@ void expectTreesEqual( const Tree& a, const Tree& b )
         const auto& lb = b.leaf( db[i] );
         for ( int j = 0; j < M; ++j )
         {
-            EXPECT_NEAR( la.box.center( j ), lb.box.center( j ), 1e-12 );
-            EXPECT_NEAR( la.box.halfWidth( j ), lb.box.halfWidth( j ), 1e-12 );
+            EXPECT_NEAR( la.domain.center( j ), lb.domain.center( j ), 1e-12 );
+            EXPECT_NEAR( la.domain.halfWidth( j ), lb.domain.halfWidth( j ), 1e-12 );
         }
         for ( int r = 0; r < D; ++r )
             for ( std::size_t k = 0; k < Nc; ++k )

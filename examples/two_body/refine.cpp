@@ -58,30 +58,17 @@ constexpr int D = 4;  // state dimension (x, y, vx, vy)
 
 using TE = tax::TE< P, M >;
 using DAState = tax::la::VecNT< D, TE >;
-using BoxT = tax::ads::Box< double, M >;
+using BoxT = tax::domain::Box< double, M >;
 
 // The box varies axes 1 (y) and 3 (vy); kIcBoxHalfWidth pins x and vx to 0.
 constexpr int kAxisY = 1;
 constexpr int kAxisVy = 3;
 
-// Reconstruct a leaf's identity (t0) DA state from its sub-box: each axis
-// carries the (possibly shifted) center and (possibly halved) half-width.
+// Reconstruct a leaf's identity (t0) DA state from its sub-box via the
+// library's create (constant term = center, degree-1 term = half-width).
 // Re-propagating this densely recovers the leaf's flow map at every time,
 // not just the final one.
-DAState leafInit( const BoxT& box )
-{
-    DAState s;
-    for ( int i = 0; i < D; ++i )
-    {
-        TE c{};
-        c[0] = box.center( i );
-        tax::MultiIndex< M > alpha{};
-        alpha[static_cast< std::size_t >( i )] = 1;
-        c[tax::flatIndex< M >( alpha )] = box.halfWidth( i );
-        s( i ) = std::move( c );
-    }
-    return s;
-}
+DAState leafInit( const BoxT& box ) { return tax::domain::create< P, M >( box, box.center ); }
 
 // Shoelace area of a closed polygon.
 double polygonArea( const Polygon& p )
@@ -205,7 +192,7 @@ int main( int argc, char** argv )
                 const auto& leaf = tree.leaf( li );
                 if ( collectSnapshots )
                 {
-                    auto sol = tax::ode::propagate( Verner89{}, rhs(), leafInit( leaf.box ), 0.0,
+                    auto sol = tax::ode::propagate( Verner89{}, rhs(), leafInit( leaf.domain ), 0.0,
                                                     t_final, cfg );
                     for ( std::size_t si = 0; si < snap_times.size(); ++si )
                     {
@@ -237,13 +224,7 @@ int main( int argc, char** argv )
                 auto idx = tree.locate( m.ic );
                 if ( !idx.has_value() ) continue;
                 const auto& leaf = tree.leaf( *idx );
-                std::array< double, M > local{};
-                for ( int j = 0; j < M; ++j )
-                {
-                    const double hw = leaf.box.halfWidth( j );
-                    local[static_cast< std::size_t >( j )] =
-                        hw > 0.0 ? ( m.ic( j ) - leaf.box.center( j ) ) / hw : 0.0;
-                }
+                const auto local = leaf.domain.localize( m.ic );
                 const double dx = leaf.payload( 0 ).eval( local ) - m.truth_x[last];
                 const double dy = leaf.payload( 1 ).eval( local ) - m.truth_y[last];
                 sq += dx * dx + dy * dy;

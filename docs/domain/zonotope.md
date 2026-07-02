@@ -29,7 +29,7 @@ the coordinate axes.
 using namespace tax::ode::methods;
 
 // Oriented thin initial set: G = R(θ) · diag(longHalf, thinHalf)
-tax::ads::Zonotope<double, 2> ic;
+tax::domain::Zonotope<double, 2> ic;
 ic.center     = center_vec;
 ic.generators = R * scale;   // any M×M matrix
 
@@ -40,9 +40,9 @@ auto sol = tax::ads::propagate</*P=*/6>(
 const auto& tree = sol.tree();
 for (int i : tree.done()) {
     const auto& leaf = tree.leaf(i);
-    // leaf.box is the leaf's Zonotope; recover local factors with
-    //   ξ = leaf.box.generators.partialPivLu().solve(x - leaf.box.center);
-    // then evaluate leaf.payload(ξ).
+    // leaf.domain is the leaf's Zonotope; recover local factors with
+    //   ξ = leaf.domain.localize(x);
+    // then evaluate leaf.payload(ξ) — or use sol.evaluate(x) directly.
 }
 ```
 
@@ -51,8 +51,8 @@ for (int i : tree.done()) {
 The DA flow-map payload and every split/merge substitution
 (`da_state.hpp`, `merge.hpp`) operate in the **normalised factor coordinates**
 `ξ ∈ [-1, 1]^M`, independent of how those factors map to physical space. Only
-four operations are domain-aware — `contains`, `denormalize`, `split`,
-`splitOrdinate` — so the entire pipeline (`Leaf`, `AdsTree`, `AdsDriver`,
+five operations are domain-aware — `localize`, `contains`, `denormalize`,
+`split`, `splitOrdinate` — so the entire pipeline (`Leaf`, `AdsTree`, `AdsDriver`,
 `merge`) was generalised over a `Domain` type that **defaults to `Box<T, M>`**;
 existing code and tests are unaffected. A generator-bisection split reuses the
 same per-axis binomial re-identification (`substituteAxis`) the box split uses.
@@ -91,7 +91,7 @@ leaf counts at every snapshot so the trade-off is visible, not hidden.
 
 A *fixed* orientation is arbitrary — the two-body example above wins over most
 of the orbit but loses at the periapsis return. The fix is to choose the frame
-from the dynamics. `include/tax/ads/domains/reorient.hpp` provides the primitives:
+from the dynamics. `include/tax/domain/reorient.hpp` provides the primitives:
 
 | Function | Role |
 |----------|------|
@@ -149,5 +149,6 @@ python3 examples/plot/plot_two_body_zonotope_adaptive.py   # -> two_body_zonotop
 - **`merge` ordering** of a sibling pair uses `splitOrdinate` (centre projected
   onto the split generator), which is correct for a parallelotope but has not
   been stressed on near-degenerate generator matrices.
-- **`contains`** solves `G⁻¹(pt − center)` per query (an `M×M` LU). Fine for the
-  `M ≲` few dimensions ADS targets; a stored factorisation would help at scale.
+- **`contains`/`localize`** solve a rank-revealing least-squares per query
+  (`completeOrthogonalDecomposition`), so rank-deficient generator matrices
+  (pinned axes) are handled; a stored factorisation would help at scale.

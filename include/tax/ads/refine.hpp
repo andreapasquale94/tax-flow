@@ -34,10 +34,12 @@
 #include <span>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/detail/work_pool.hpp>
-#include <tax/ads/domains/box.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/create.hpp>
+#include <tax/domain/detail/substitute_axis.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/config.hpp>
 #include <tax/ode/integrator.hpp>
@@ -62,8 +64,8 @@ class AdsRefineDriver
     static constexpr int M = TE::vars_v;
     static constexpr int D = State::RowsAtCompileTime;
 
-    using Tree = AdsTree< State, M, T >;
-    using BoxT = Box< T, M >;
+    using Tree = AdsTree< State, tax::domain::Box< T, M > >;
+    using BoxT = tax::domain::Box< T, M >;
 
     // See AdsDriver: the refine driver also uses Stepper::T as the real scalar.
     static_assert( std::is_floating_point_v< T >,
@@ -86,7 +88,7 @@ class AdsRefineDriver
                             T t0, T t1 )
     {
         Tree tree;
-        State root_init = tax::ads::create< N, M >( ic_box, ic_center );
+        State root_init = tax::domain::create< N, M >( ic_box, ic_center );
         const int rootIdx = tree.init( ic_box, State{}, t0 );
 
         // The root is the only box not propagated as someone's child, so
@@ -156,7 +158,8 @@ class AdsRefineDriver
             {
                 const T shift = ( ( c >> j ) & 1u ) ? T{ 0.5 } : T{ -0.5 };
                 for ( Eigen::Index r = 0; r < ci.size(); ++r )
-                    ci( r ) = detail::substituteAxis( ci( r ), dims[j], shift, T{ 0.5 } );
+                    ci( r ) =
+                        tax::domain::detail::substituteAxis( ci( r ), dims[j], shift, T{ 0.5 } );
             }
             flows[c] = propagateLeaf( rhs, ci, t0, t1 );
             inits[c] = std::move( ci );
@@ -259,10 +262,10 @@ class AdsRefineDriver
 
 // Function-form entry point. P is the DA truncation order; M (box dim) and
 // D (state dim) are deduced. The method tag selects the stepper; the quality
-// criterion drives refinement. Returns a bare AdsTree<DAState, M, T> — unlike
+// criterion drives refinement. Returns a bare AdsTree<DAState, Box<T,M>> — unlike
 // tax::ads::propagate(), which returns AdsSolution<Stepper, M>.
 template < int P, class Method, class Quality, class F, class T, int M, int D >
-[[nodiscard]] auto refine( Method, Quality quality, F&& rhs, const Box< T, M >& ic_box,
+[[nodiscard]] auto refine( Method, Quality quality, F&& rhs, const tax::domain::Box< T, M >& ic_box,
                            const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
                            tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1,
                            int split_dirs = 1 )

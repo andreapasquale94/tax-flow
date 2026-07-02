@@ -38,10 +38,10 @@
 #include <concepts>
 #include <cstddef>
 #include <span>
-#include <tax/ads/da_state.hpp>
 #include <tax/ads/detail/nonlinearity_index.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/detail/substitute_axis.hpp>
 #include <vector>
 
 namespace tax::ads
@@ -143,7 +143,8 @@ template < class T, int N, int M, class Storage, int D >
         for ( std::size_t j = 0; j < dims.size(); ++j )
         {
             const T shift = ( ( combo >> j ) & 1u ) ? T{ 0.5 } : T{ -0.5 };
-            restricted = tax::ads::detail::substituteAxis( restricted, dims[j], shift, T{ 0.5 } );
+            restricted =
+                tax::domain::detail::substituteAxis( restricted, dims[j], shift, T{ 0.5 } );
         }
         for ( std::size_t k = 0; k < Ncoef; ++k )
         {

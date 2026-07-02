@@ -60,9 +60,9 @@ Mat2 active( const Mat4& A )
     return B;
 }
 
-tax::ads::Zonotope< double, 4 > zonoFrom( const Mat2& block )
+tax::domain::Zonotope< double, 4 > zonoFrom( const Mat2& block )
 {
-    tax::ads::Zonotope< double, 4 > z;
+    tax::domain::Zonotope< double, 4 > z;
     z.center = example::two_body::icCenter();
     z.generators = embed( block );
     return z;
@@ -104,19 +104,20 @@ int main()
                                   rhs(), zonoFrom( L ), icCenter(), 0.0, t_final, cfg );
     const auto& probe_tree = probe.tree();
     const auto& probe_map = probe_tree.leaf( probe_tree.done().front() ).payload;
-    const Mat4 Phi = tax::ads::linearPart( probe_map );    // ∂x/∂ξ at t_final
-    const Mat2 PhiL = active( Phi );                       // = Φ_act · L (probe used G = L)
-    const Mat2 V = tax::ads::flowAlignedRotation( PhiL );  // align the frame to the flow
+    const Mat4 Phi = tax::domain::linearPart( probe_map );    // ∂x/∂ξ at t_final
+    const Mat2 PhiL = active( Phi );                          // = Φ_act · L (probe used G = L)
+    const Mat2 V = tax::domain::flowAlignedRotation( PhiL );  // align the frame to the flow
 
     // ---- The three coverings of the same ellipsoid ---------------------------
-    // (a) axis-aligned bounding box: half-width on each axis is that row's
-    //     2-norm of L (the ellipse's marginal extent).
-    Vec4 box_hw = Vec4::Zero();
-    box_hw( kAy ) = L.row( 0 ).norm();
-    box_hw( kAv ) = L.row( 1 ).norm();
-    const tax::ads::Box< double, 4 > cover_box{ icCenter(), box_hw };
-    const auto cover_chol = zonoFrom( L );         // (b) fixed Cholesky frame
-    const auto cover_aligned = zonoFrom( L * V );  // (c) flow-aligned frame
+    // (a) axis-aligned bounding box: the ellipsoid's exact interval hull
+    //     (per-axis extent = that row's 2-norm of L, the marginal extent).
+    const tax::domain::Box< double, 4 > cover_box =
+        tax::domain::ellipsoidIntervalHull( icCenter(), embed( L ) );
+    const Vec4& box_hw = cover_box.halfWidth;
+    // (b) fixed Cholesky frame; (c) flow-aligned frame — both are
+    // ellipsoidCover(c, L[, V]) parallelotopes on the active axes.
+    const auto cover_chol = zonoFrom( L );
+    const auto cover_aligned = zonoFrom( L * V );
 
     // ---- reorientState demonstration -----------------------------------------
     // Re-express the probe flow map in the aligned frame and confirm the
@@ -126,8 +127,8 @@ int main()
     R4( kAy, kAv ) = V( 0, 1 );
     R4( kAv, kAy ) = V( 1, 0 );
     R4( kAv, kAv ) = V( 1, 1 );
-    const auto probe_aligned = tax::ads::reorientState( probe_map, R4 );
-    const Mat2 PhiLV = active( tax::ads::linearPart( probe_aligned ) );
+    const auto probe_aligned = tax::domain::reorientState( probe_map, R4 );
+    const Mat2 PhiLV = active( tax::domain::linearPart( probe_aligned ) );
     const double offdiag_before = std::abs( ( PhiL.transpose() * PhiL )( 0, 1 ) );
     const double offdiag_after = std::abs( ( PhiLV.transpose() * PhiLV )( 0, 1 ) );
 

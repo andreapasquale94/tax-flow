@@ -14,11 +14,11 @@
 
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/da_state.hpp>
-#include <tax/ads/domains/domain.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/detail/substitute_axis.hpp>
+#include <tax/domain/domain.hpp>
 #include <tax/la/types.hpp>
 #include <utility>
 #include <vector>
@@ -36,7 +36,7 @@ struct MergeStats
 namespace detail
 {
 // The inverse of the split substitution is ξ_dim → shift + 2·ξ_dim:
-// detail::substituteAxis (da_state.hpp) with scale = 2.
+// tax::domain::detail::substituteAxis with scale = 2.
 // shift = +1 for the left child, shift = -1 for the right child.
 
 template < class T, int N, int M, class Storage, int D >
@@ -58,10 +58,11 @@ template < class T, int N, int M, class Storage, int D >
 }
 }  // namespace detail
 
-template < class Payload, int M, class T, class Domain, class Criterion >
-    requires LocatableDomain< Domain >
-MergeStats merge( AdsTree< Payload, M, T, Domain >& tree, Criterion crit )
+template < class Payload, class Domain, class Criterion >
+    requires tax::domain::LocatableDomain< Domain >
+MergeStats merge( AdsTree< Payload, Domain >& tree, Criterion crit )
 {
+    using T = tax::domain::domain_scalar_t< Domain >;
     MergeStats stats{};
 
     while ( true )
@@ -86,8 +87,8 @@ MergeStats merge( AdsTree< Payload, M, T, Domain >& tree, Criterion crit )
             // generalizes to the oriented split position for a Zonotope):
             // the child with the lower splitOrdinate is the left child
             // (shift = +1 for left, -1 for right).
-            const int leftIdx = ( tree.leaf( li ).box.splitOrdinate( dim ) <
-                                  tree.leaf( sib ).box.splitOrdinate( dim ) )
+            const int leftIdx = ( tree.leaf( li ).domain.splitOrdinate( dim ) <
+                                  tree.leaf( sib ).domain.splitOrdinate( dim ) )
                                     ? li
                                     : sib;
             const int rightIdx = ( leftIdx == li ) ? sib : li;
@@ -100,8 +101,8 @@ MergeStats merge( AdsTree< Payload, M, T, Domain >& tree, Criterion crit )
             Payload fromR{ pr.size() };
             for ( Eigen::Index r = 0; r < fromL.size(); ++r )
             {
-                fromL( r ) = detail::substituteAxis( pl( r ), dim, T{ 1 }, T{ 2 } );
-                fromR( r ) = detail::substituteAxis( pr( r ), dim, T{ -1 }, T{ 2 } );
+                fromL( r ) = tax::domain::detail::substituteAxis( pl( r ), dim, T{ 1 }, T{ 2 } );
+                fromR( r ) = tax::domain::detail::substituteAxis( pr( r ), dim, T{ -1 }, T{ 2 } );
             }
 
             const T diff = detail::maxCoeffDiff( fromL, fromR );

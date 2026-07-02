@@ -6,22 +6,22 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/domains/box.hpp>
-#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/ads/merge.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/ads/tree.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
 using tax::ads::AdsTree;
-using tax::ads::Box;
-using tax::ads::create;
 using tax::ads::merge;
 using tax::ads::MergeStats;
 using tax::ads::split;
 using tax::ads::TruncationCriterion;
+using tax::domain::Box;
+using tax::domain::create;
 
 namespace
 {
@@ -30,7 +30,7 @@ constexpr int M = 2;
 constexpr int D = 2;
 using TE = tax::TE< P, M >;
 using State = tax::la::VecNT< D, TE >;
-using Tree = AdsTree< State, M, double >;
+using Tree = AdsTree< State, tax::domain::Box< double, M > >;
 }  // namespace
 
 TEST( AdsMerge, CollapsesUnnecessarySplit )

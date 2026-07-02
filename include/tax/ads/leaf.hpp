@@ -1,25 +1,24 @@
 // include/tax/ads/leaf.hpp
 //
-// Leaf<Payload, M, T> — single arena entry in AdsTree. Each leaf owns
-// its Box subdomain and a Payload, plus parent / sibling indices and
-// the dim/value that separated it from its sibling. A retired leaf is
-// the parent of an active or done sibling pair; it stays in the arena
-// so the merger can revive it via AdsTree::merge.
+// Leaf<Payload, Domain> — single arena entry in AdsTree. Each leaf owns
+// its subdomain (any tax::domain primitive) and a Payload, plus parent /
+// sibling indices and the dim that separated it from its sibling. A
+// retired leaf is the parent of an active or done sibling pair; it stays
+// in the arena so the merger can revive it via AdsTree::merge.
 
 #pragma once
 
-#include <tax/ads/domains/box.hpp>
+#include <tax/domain/domain.hpp>
 
 namespace tax::ads
 {
 
-template < class Payload, int M, class T = double, class Domain = Box< T, M > >
+template < class Payload, tax::domain::Domain Domain >
 struct Leaf
 {
-    // The leaf's subdomain. Defaults to an axis-aligned Box; any domain
-    // (Zonotope, PolynomialZonotope) can be substituted. The member keeps the
-    // name `box` for source compatibility regardless of concrete domain type.
-    Domain box{};
+    using T = tax::domain::domain_scalar_t< Domain >;
+
+    Domain domain{};
     Payload payload{};
     int depth = 0;
     bool done = false;

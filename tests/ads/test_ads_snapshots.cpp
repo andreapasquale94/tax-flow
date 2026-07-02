@@ -15,8 +15,8 @@
 #include <tax/tax.hpp>
 #include <vector>
 
-using tax::ads::Box;
 using tax::ads::TruncationCriterion;
+using tax::domain::Box;
 using tax::ode::IntegratorConfig;
 using tax::ode::methods::Verner89;
 
@@ -58,7 +58,7 @@ double totalVolume( const Partition& part )
     for ( const auto& leaf : part )
     {
         double vol = 1.0;
-        for ( int k = 0; k < M; ++k ) vol *= 2.0 * leaf.box.halfWidth( k );
+        for ( int k = 0; k < M; ++k ) vol *= 2.0 * leaf.domain.halfWidth( k );
         v += vol;
     }
     return v;
@@ -108,7 +108,7 @@ TEST( AdsSnapshots, SerialMatchesParallel )
         ASSERT_EQ( ss[i].size(), ps[i].size() ) << "snapshot " << i;
         for ( std::size_t l = 0; l < ss[i].size(); ++l )
             for ( int k = 0; k < M; ++k )
-                EXPECT_DOUBLE_EQ( ss[i][l].box.center( k ), ps[i][l].box.center( k ) );
+                EXPECT_DOUBLE_EQ( ss[i][l].domain.center( k ), ps[i][l].domain.center( k ) );
     }
 }
 

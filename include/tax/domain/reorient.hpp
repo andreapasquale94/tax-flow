@@ -1,4 +1,4 @@
-// include/tax/ads/domains/reorient.hpp
+// include/tax/domain/reorient.hpp
 //
 // Re-orientation of the factor frame for the Zonotope domain — the primitive
 // behind *adaptive* oriented ADS.
@@ -32,19 +32,19 @@
 #include <Eigen/SVD>
 #include <array>
 #include <cstddef>
-#include <tax/ads/domains/zonotope.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/zonotope.hpp>
 #include <tax/la/types.hpp>
 #include <tax/operators/arithmetic.hpp>
 #include <utility>
 
-namespace tax::ads
+namespace tax::domain
 {
 
 // y(η) = x(R·η): substitute ξ_k = Σ_j R(k,j) η_j into every component of the
 // flow map. This is a full polynomial composition (not the per-axis binomial
-// trick of da_state::split), so it costs O(numMonomials · M) TE multiplies —
+// trick of tax::ads::split), so it costs O(numMonomials · M) TE multiplies —
 // use it sparingly (a handful of re-orientations, not per step). R is M×M.
 template < class T, int N, int M, class Storage, int D, class Derived >
 [[nodiscard]] Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D,
@@ -153,4 +153,4 @@ template < class T, int M, class Derived >
     return out;
 }
 
-}  // namespace tax::ads
+}  // namespace tax::domain

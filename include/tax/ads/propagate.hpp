@@ -14,7 +14,7 @@
 //   const auto& tree = sol.tree();
 //
 //   // Oriented Zonotope IC (same call shape — only the domain type changes):
-//   tax::ads::Zonotope<double, 2> z = ...;
+//   tax::domain::Zonotope<double, 2> z = ...;
 //   auto zsol = tax::ads::propagate<6>(
 //       tax::ode::methods::Verner89{},
 //       tax::ads::TruncationCriterion{1e-4, 8},
@@ -31,9 +31,9 @@
 #include <memory>
 #include <string>
 #include <tax/ads/detail/state_traits.hpp>
-#include <tax/ads/domains/domain.hpp>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/solution.hpp>
+#include <tax/domain/domain.hpp>
 #include <tax/ode/events/grid_event.hpp>
 #include <utility>
 #include <vector>
@@ -45,15 +45,16 @@ namespace tax::ads
 //     PolynomialZonotope). AdsSolution still holds each leaf's Solution;
 //     snapshots() brackets to {t0, t1}.
 template < int P, class Method, class Criterion, class F, class DomainArg, int D >
-[[nodiscard]] auto propagate( Method, Criterion crit, F&& rhs, const DomainArg& ic_domain,
-                              const Eigen::Matrix< domain_scalar_t< DomainArg >, D, 1 >& ic_center,
-                              const domain_scalar_t< DomainArg >& t0,
-                              const domain_scalar_t< DomainArg >& t1,
-                              tax::ode::IntegratorConfig< domain_scalar_t< DomainArg > > cfg = {},
-                              int num_threads = 1 )
+[[nodiscard]] auto propagate(
+    Method, Criterion crit, F&& rhs, const DomainArg& ic_domain,
+    const Eigen::Matrix< tax::domain::domain_scalar_t< DomainArg >, D, 1 >& ic_center,
+    const tax::domain::domain_scalar_t< DomainArg >& t0,
+    const tax::domain::domain_scalar_t< DomainArg >& t1,
+    tax::ode::IntegratorConfig< tax::domain::domain_scalar_t< DomainArg > > cfg = {},
+    int num_threads = 1 )
 {
-    using T = domain_scalar_t< DomainArg >;
-    constexpr int M = domain_dim_v< DomainArg >;
+    using T = tax::domain::domain_scalar_t< DomainArg >;
+    constexpr int M = tax::domain::domain_dim_v< DomainArg >;
     using Tr = detail::AdsStateTraits< P, Method, T, M, D >;
     AdsDriver< typename Tr::Stepper, Criterion, DomainArg > driver{
         std::move( crit ), std::move( cfg ), {}, num_threads };
@@ -65,16 +66,17 @@ template < int P, class Method, class Criterion, class F, class DomainArg, int D
 //     leaf records the partition there. AdsSolution::snapshots() reconstructs
 //     them.
 template < int P, class Method, class Criterion, class F, class DomainArg, int D >
-[[nodiscard]] auto propagate( Method, Criterion crit, F&& rhs, const DomainArg& ic_domain,
-                              const Eigen::Matrix< domain_scalar_t< DomainArg >, D, 1 >& ic_center,
-                              const domain_scalar_t< DomainArg >& t0,
-                              const domain_scalar_t< DomainArg >& t1,
-                              std::vector< domain_scalar_t< DomainArg > > grid_times,
-                              tax::ode::IntegratorConfig< domain_scalar_t< DomainArg > > cfg = {},
-                              int num_threads = 1 )
+[[nodiscard]] auto propagate(
+    Method, Criterion crit, F&& rhs, const DomainArg& ic_domain,
+    const Eigen::Matrix< tax::domain::domain_scalar_t< DomainArg >, D, 1 >& ic_center,
+    const tax::domain::domain_scalar_t< DomainArg >& t0,
+    const tax::domain::domain_scalar_t< DomainArg >& t1,
+    std::vector< tax::domain::domain_scalar_t< DomainArg > > grid_times,
+    tax::ode::IntegratorConfig< tax::domain::domain_scalar_t< DomainArg > > cfg = {},
+    int num_threads = 1 )
 {
-    using T = domain_scalar_t< DomainArg >;
-    constexpr int M = domain_dim_v< DomainArg >;
+    using T = tax::domain::domain_scalar_t< DomainArg >;
+    constexpr int M = tax::domain::domain_dim_v< DomainArg >;
     using Tr = detail::AdsStateTraits< P, Method, T, M, D >;
     using DAState = typename Tr::DAState;
     using Driver = AdsDriver< typename Tr::Stepper, Criterion, DomainArg >;
