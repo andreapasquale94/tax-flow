@@ -31,3 +31,8 @@ tax_add_example(missed_thrust_onoff SOURCES missed_thrust_onoff/missed_thrust_on
 # Zonotope tutorial generators
 tax_add_example(zonotope_representations SOURCES zonotope/representations.cpp)
 tax_add_example(zonotope_two_body_mc     SOURCES zonotope/two_body_mc.cpp)
+
+# Hyperbolic-flyby B-plane tutorial
+tax_add_example(hyperbola_bplane_taylor SOURCES hyperbola/bplane_taylor.cpp)
+tax_add_example(hyperbola_bplane_ads    SOURCES hyperbola/bplane_ads.cpp)
+tax_add_example(hyperbola_snapshots     SOURCES hyperbola/snapshots.cpp)

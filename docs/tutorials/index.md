@@ -35,6 +35,16 @@ scripts in `examples/plot/` turn those into the figures shown here
     initial conditions wherever the answer changes. Fully parallel, and it
     converges onto a Monte-Carlo reference as the box count grows.
 
+-   **[Hyperbolic flyby & B-plane](hyperbola.md)**
+
+    ---
+
+    Fly an incoming hyperbola past a body: locate closest approach as an
+    event, expand its *time* and *state* in the initial uncertainty, and
+    enclose the B-plane crossing with a box, a zonotope, and a polynomial
+    zonotope — first with one Taylor map, then with ADS tiling the event
+    surface leaf by leaf.
+
 -   **[Three-body problem](three_body.md)**
 
     ---

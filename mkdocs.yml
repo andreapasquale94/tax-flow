@@ -110,6 +110,7 @@ nav:
       - Overview: tutorials/index.md
       - Two-Body Problem: tutorials/two_body.md
       - Parallel ADS by Refinement: tutorials/two_body_refine.md
+      - Hyperbolic Flyby & B-plane: tutorials/hyperbola.md
       - Three-Body Problem: tutorials/three_body.md
       - Low-Thrust Reachability: tutorials/reachability.md
       - Missed-Thrust Dispersion: tutorials/missed_thrust.md
