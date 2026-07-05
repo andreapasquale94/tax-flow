@@ -11,11 +11,9 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <optional>
-#include <tax/ads/detail/model_state.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/domain/domain.hpp>
 #include <tax/la/types.hpp>
@@ -30,43 +28,6 @@ namespace tax::ads
 // overload tags its GridEvent with this; snapshots() groups only records that
 // carry it, so a user's own (unsynchronized) events never enter a snapshot.
 inline constexpr const char* kSnapshotLabel = "ads:grid";
-
-namespace detail
-{
-// Evaluate a stored flow map at factor coordinates ξ (nullptr payload →
-// nullopt). TE payloads yield point values; Taylor-model payloads yield
-// rigorous interval enclosures (ξ is clamped to each model's displacement
-// domain, absorbing the locate tolerance at split boundaries).
-template < class State, int M, class T >
-[[nodiscard]] auto evalStateAt( const State* payload, const tax::la::VecNT< M, T >& xi )
-{
-    if constexpr ( ModelValuedState< State > )
-    {
-        using IV = typename State::Scalar::interval_type;
-        using Out = Eigen::Matrix< IV, State::RowsAtCompileTime, 1 >;
-        if ( payload == nullptr ) return std::optional< Out >{};
-        Out out{ payload->size() };
-        for ( Eigen::Index i = 0; i < payload->size(); ++i )
-        {
-            const auto dd = ( *payload )( i ).displacementDomain();
-            std::array< T, std::size_t( M ) > arr{};
-            for ( int j = 0; j < M; ++j )
-                arr[std::size_t( j )] = std::clamp( xi( j ), dd[std::size_t( j )].lower(),
-                                                    dd[std::size_t( j )].upper() );
-            out( i ) = ( *payload )( i ).eval( arr );
-        }
-        return std::optional< Out >{ std::move( out ) };
-    } else
-    {
-        using Out = Eigen::Matrix< T, State::RowsAtCompileTime, 1 >;
-        if ( payload == nullptr ) return std::optional< Out >{};
-        Out out{ payload->size() };
-        for ( Eigen::Index i = 0; i < payload->size(); ++i )
-            out( i ) = ( *payload )( i ).eval( xi );
-        return std::optional< Out >{ std::move( out ) };
-    }
-}
-}  // namespace detail
 
 template < class Stepper, tax::domain::Domain Domain >
 class AdsSolution
@@ -103,11 +64,9 @@ class AdsSolution
         // Evaluate the partition's piecewise-polynomial map at a physical IC
         // point: exact factor location (smallest ‖ξ‖∞ among claiming leaves),
         // then the owning leaf's flow map at ξ. nullopt if no leaf claims pt.
-        // Taylor-model payloads return a vector of rigorous interval
-        // enclosures instead of point values.
         template < class Derived >
-        [[nodiscard]] auto evaluate( const Eigen::MatrixBase< Derived >& pt,
-                                     T tol = T{ 1e-9 } ) const
+        [[nodiscard]] std::optional< Eigen::Matrix< T, State::RowsAtCompileTime, 1 > > evaluate(
+            const Eigen::MatrixBase< Derived >& pt, T tol = T{ 1e-9 } ) const
             requires tax::domain::LocatableDomain< Domain >
         {
             const LeafView* best = nullptr;
@@ -125,7 +84,11 @@ class AdsSolution
                 bestXi = xi;
                 best = &lv;
             }
-            return detail::evalStateAt< State, M >( best ? &best->flowMap : nullptr, bestXi );
+            if ( best == nullptr ) return std::nullopt;
+            Eigen::Matrix< T, State::RowsAtCompileTime, 1 > out{ best->flowMap.size() };
+            for ( Eigen::Index i = 0; i < best->flowMap.size(); ++i )
+                out( i ) = best->flowMap( i ).eval( bestXi );
+            return out;
         }
 
        private:
@@ -164,17 +127,18 @@ class AdsSolution
 
     // Evaluate the FINAL piecewise-polynomial flow map at a physical IC point:
     // locate the done leaf owning pt (exact factor recovery) and evaluate its
-    // payload there. nullopt if no leaf claims the point. Taylor-model
-    // payloads return a vector of rigorous interval enclosures.
+    // payload there. nullopt if no leaf claims the point.
     template < class Derived >
-    [[nodiscard]] auto evaluate( const Eigen::MatrixBase< Derived >& pt, T tol = T{ 1e-9 } ) const
+    [[nodiscard]] std::optional< Eigen::Matrix< T, State::RowsAtCompileTime, 1 > > evaluate(
+        const Eigen::MatrixBase< Derived >& pt, T tol = T{ 1e-9 } ) const
         requires tax::domain::LocatableDomain< Domain >
     {
         const auto loc = tree_.locateFactors( pt, tol );
-        const State* payload = loc ? &tree_.leaf( loc->idx ).payload : nullptr;
-        tax::la::VecNT< M, T > xi;
-        if ( loc ) xi = loc->xi;
-        return detail::evalStateAt< State, M >( payload, xi );
+        if ( !loc ) return std::nullopt;
+        const State& payload = tree_.leaf( loc->idx ).payload;
+        Eigen::Matrix< T, State::RowsAtCompileTime, 1 > out{ payload.size() };
+        for ( Eigen::Index i = 0; i < payload.size(); ++i ) out( i ) = payload( i ).eval( loc->xi );
+        return out;
     }
 
     // The accepted partition at t1: the done leaves with their final flow maps.

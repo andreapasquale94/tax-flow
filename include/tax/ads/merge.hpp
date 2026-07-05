@@ -15,7 +15,6 @@
 #include <cmath>
 #include <cstddef>
 #include <optional>
-#include <tax/ads/detail/model_state.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/multi_index.hpp>
 #include <tax/core/taylor_expansion.hpp>
@@ -72,14 +71,6 @@ template < class Payload, class Domain, class Criterion >
 MergeStats merge( AdsTree< Payload, Domain >& tree, Criterion crit,
                   std::optional< tax::domain::domain_scalar_t< Domain > > mergeTol = std::nullopt )
 {
-    // Merging is NOT sound for Taylor-model payloads: the inverse substitution
-    // ξ → ±1 + 2ξ extrapolates each child's polynomial onto the full parent
-    // domain, where the child's remainder bound does not hold — the merged
-    // model would claim rigor it doesn't have. Refuse at compile time.
-    static_assert( !detail::ModelValuedState< Payload >,
-                   "tax::ads::merge(): Taylor-model payloads cannot be merged rigorously (a "
-                   "child's remainder bound does not extend to the parent domain)" );
-
     using T = tax::domain::domain_scalar_t< Domain >;
     const T tol = mergeTol.value_or( static_cast< T >( crit.tol ) );
     MergeStats stats{};

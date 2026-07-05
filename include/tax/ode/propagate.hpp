@@ -67,14 +67,6 @@ struct Feagin14
 {
 };
 
-// Validated Taylor-model integration via Picard iteration (requires the tax
-// core's tax::model module; stepper in <tax/ode/steppers/taylor_model.hpp>).
-// The state must be an Eigen vector of tax::model::TaylorModel — the order is
-// carried by the state's scalar, so the tag itself has no parameters.
-struct Picard
-{
-};
-
 }  // namespace methods
 
 namespace detail

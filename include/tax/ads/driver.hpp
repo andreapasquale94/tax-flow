@@ -73,20 +73,10 @@ class AdsDriver
                                                        T t0, T t1 )
     {
         Tree tree;
-        State root_state;
-        // A stepper may own its state construction (e.g. TaylorModelStepper
-        // builds tax::model states via tax::domain::createModel); detected
-        // structurally so this header needs no knowledge of those state types.
-        if constexpr ( requires { Stepper::template createState< N, M >( ic_domain, ic_center ); } )
-        {
-            root_state = Stepper::template createState< N, M >( ic_domain, ic_center );
-        } else
-        {
-            // Unqualified: ADL finds the create() overload in the domain's own
-            // namespace (tax::domain for the built-ins, or a user namespace for
-            // a custom Domain), including overloads declared after this header.
-            root_state = create< N, M >( ic_domain, ic_center );
-        }
+        // Unqualified: ADL finds the create() overload in the domain's own
+        // namespace (tax::domain for the built-ins, or a user namespace for a
+        // custom Domain), including overloads declared after this header.
+        State root_state = create< N, M >( ic_domain, ic_center );
         (void)tree.init( ic_domain, std::move( root_state ), t0 );
 
         std::vector< LeafSol > leafSol;

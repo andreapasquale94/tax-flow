@@ -110,7 +110,6 @@ nav:
       - Overview: tutorials/index.md
       - Two-Body Problem: tutorials/two_body.md
       - Parallel ADS by Refinement: tutorials/two_body_refine.md
-      - Validated Taylor Models: tutorials/two_body_taylor_model.md
       - Three-Body Problem: tutorials/three_body.md
       - Low-Thrust Reachability: tutorials/reachability.md
       - Missed-Thrust Dispersion: tutorials/missed_thrust.md
@@ -122,7 +121,6 @@ nav:
       - Methods & Benchmarks: ode/methods.md
       - Events: ode/events.md
       - Examples: ode/examples.md
-      - Taylor Models (validated): ode/taylor_models.md
   - Domains:
       - Overview: domain/index.md
       - Zonotope domain: domain/zonotope.md

@@ -27,9 +27,3 @@
 #include <tax/ode/steppers/verner67.hpp>
 #include <tax/ode/steppers/verner78.hpp>
 #include <tax/ode/steppers/verner89.hpp>
-
-// Validated Taylor-model integration (methods::Picard) — only when the tax
-// core ships the tax::model module (tax PR "feat(model)").
-#if __has_include( <tax/model.hpp>)
-#include <tax/ode/steppers/taylor_model.hpp>
-#endif

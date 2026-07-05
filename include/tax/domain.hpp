@@ -18,9 +18,3 @@
 #include <tax/domain/polynomial_zonotope.hpp>
 #include <tax/domain/reorient.hpp>
 #include <tax/domain/zonotope.hpp>
-
-// Taylor-model bridge (createModel + rigorous enclosures) — only when the tax
-// core ships the tax::model module (tax PR "feat(model)").
-#if __has_include( <tax/model.hpp>)
-#include <tax/domain/model.hpp>
-#endif

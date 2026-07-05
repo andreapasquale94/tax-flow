@@ -6,8 +6,6 @@ namespace tax::ads::detail
 {
 // The (TE, DA-state, Stepper) triplet derived from order P, dims M/D and a
 // method tag — shared by propagate()'s overloads. Storage is Dense.
-// Specialized for tax::ode::methods::Picard (Taylor-model states) in
-// <tax/ads/model.hpp>.
 template < int P, class Method, class T, int M, int D >
 struct AdsStateTraits
 {
