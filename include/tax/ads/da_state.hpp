@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <tax/ads/detail/model_state.hpp>
 #include <tax/core/taylor_expansion.hpp>
 #include <tax/domain/create.hpp>
 #include <tax/domain/detail/substitute_axis.hpp>
@@ -37,6 +38,31 @@ split( const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M 
     {
         L( i ) = tax::domain::detail::substituteAxis( state( i ), dim, T{ -0.5 }, T{ 0.5 } );
         R( i ) = tax::domain::detail::substituteAxis( state( i ), dim, T{ 0.5 }, T{ 0.5 } );
+    }
+    return { std::move( L ), std::move( R ) };
+}
+
+// split(state, dim) for Taylor-model states (duck-typed, see
+// detail/model_state.hpp): the substitution acts on the polynomial parts
+// exactly as for TE states; the remainder, expansion point and domain carry
+// over UNCHANGED — the child's local cube maps into a subset of the parent's,
+// where the parent's remainder bound already holds, so the child model is a
+// valid (if slightly conservative) enclosure on its half.
+template < class ModelState >
+    requires detail::ModelValuedState< ModelState >
+[[nodiscard]] std::pair< ModelState, ModelState > split( const ModelState& state, int dim )
+{
+    using T = typename ModelState::Scalar::scalar_type;
+    ModelState L{ state.size() };
+    ModelState R{ state.size() };
+    for ( Eigen::Index i = 0; i < state.size(); ++i )
+    {
+        L( i ) = state( i );
+        R( i ) = state( i );
+        L( i ).polynomial() = tax::domain::detail::substituteAxis( state( i ).polynomial(), dim,
+                                                                   T{ -0.5 }, T{ 0.5 } );
+        R( i ).polynomial() =
+            tax::domain::detail::substituteAxis( state( i ).polynomial(), dim, T{ 0.5 }, T{ 0.5 } );
     }
     return { std::move( L ), std::move( R ) };
 }

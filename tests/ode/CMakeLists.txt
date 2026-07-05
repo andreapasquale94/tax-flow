@@ -46,6 +46,7 @@ tax_add_test(test_ode_verner89_stepper    SOURCES steppers/test_verner89.cpp)
 tax_add_test(test_ode_fehlberg78_stepper  SOURCES steppers/test_fehlberg78.cpp)
 tax_add_test(test_ode_feagin12_stepper    SOURCES steppers/test_feagin12.cpp)
 tax_add_test(test_ode_feagin14_stepper    SOURCES steppers/test_feagin14.cpp)
+tax_add_test(test_ode_taylor_model_stepper SOURCES steppers/test_taylor_model.cpp)
 
 # ---- End-to-end problems ------------------------------------------------
 tax_add_test(test_ode_two_body_kepler     SOURCES problems/test_two_body_kepler.cpp)

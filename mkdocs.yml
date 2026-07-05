@@ -121,9 +121,12 @@ nav:
       - Methods & Benchmarks: ode/methods.md
       - Events: ode/events.md
       - Examples: ode/examples.md
+      - Taylor Models (validated): ode/taylor_models.md
+  - Domains:
+      - Overview: domain/index.md
+      - Zonotope domain: domain/zonotope.md
+      - Polynomial Zonotope domain: domain/polynomial_zonotope.md
   - Automatic Domain Splitting:
       - Overview: ads/index.md
       - API Reference: ads/api.md
       - Refinement: ads/refine.md
-      - Zonotope domain: ads/zonotope.md
-      - Polynomial Zonotope domain: ads/polynomial_zonotope.md

@@ -19,3 +19,9 @@
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/domain.hpp>
+
+// ADS over validated Taylor-model states (methods::Picard) — only when the
+// tax core ships the tax::model module (tax PR "feat(model)").
+#if __has_include( <tax/model.hpp>)
+#include <tax/ads/model.hpp>
+#endif

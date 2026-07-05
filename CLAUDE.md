@@ -20,6 +20,17 @@ Truncated Algebraic eXpansions (TAX) core. It ships three header-only modules:
 had inside the `tax` repository; `<tax/domain.hpp>` was later split out of
 `tax::ads`. `ads` depends on `ode` and `domain`; all depend on the `tax` core.
 
+**Taylor-model support (optional):** when the `tax` core ships the
+`tax::model` module (Taylor models with rigorous remainder bounds), tax-flow
+adds VALIDATED integration end-to-end: `tax::ode::methods::Picard` (a
+Picard-iteration stepper with remainder verification,
+`ode/steppers/taylor_model.hpp`), the domain bridge `createModel` + rigorous
+enclosures (`domain/model.hpp`), and ADS over Taylor-model payloads
+(`ads/model.hpp`; splits act on polynomial parts, `AdsSolution::evaluate`
+returns interval enclosures; `merge`/`refine` are refused at compile time).
+All of it is compiled only `#if __has_include(<tax/model.hpp>)` — the library
+builds unchanged against an older core. See `docs/ode/taylor_models.md`.
+
 - **Version:** 0.1.0
 - **License:** BSD 3-Clause
 - **C++ Standard:** C++23 (required)

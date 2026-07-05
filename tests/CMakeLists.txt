@@ -25,6 +25,7 @@ tax_add_test(test_domain_reorient SOURCES domain/test_reorient.cpp)
 tax_add_test(test_domain_polynomial_zonotope SOURCES domain/test_polynomial_zonotope.cpp)
 tax_add_test(test_domain_enclosure SOURCES domain/test_enclosure.cpp)
 tax_add_test(test_domain_localize_evaluate SOURCES domain/test_localize_evaluate.cpp)
+tax_add_test(test_domain_model SOURCES domain/test_model.cpp)
 
 # ADS
 tax_add_test(test_ads_leaf_tree SOURCES ads/test_leaf_tree.cpp)
@@ -38,6 +39,7 @@ tax_add_test(test_ads_parallel SOURCES ads/test_parallel.cpp)
 tax_add_test(test_ads_refine SOURCES ads/test_refine.cpp)
 tax_add_test(test_ads_solution SOURCES ads/test_ads_solution.cpp)
 tax_add_test(test_ads_snapshots SOURCES ads/test_ads_snapshots.cpp)
+tax_add_test(test_ads_model SOURCES ads/test_model.cpp)
 
 # ODE integrator
 add_subdirectory(ode)
