@@ -24,6 +24,12 @@
 //
 // `comps` selects which state components span the enclosure (e.g. position
 // coordinates only); K is its size.
+//
+// Rigor: every construction here is a mathematical enclosure in EXACT
+// coefficient arithmetic (each monomial's range over the cube is covered).
+// Floating-point round-off of the coefficient sums (~1 ulp per addition) is
+// NOT outward-rounded — the same contract as the rest of the TE pipeline.
+// For guaranteed bounds use the tax::model Taylor-model layer when available.
 
 #pragma once
 

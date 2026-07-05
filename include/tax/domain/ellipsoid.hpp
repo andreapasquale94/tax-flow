@@ -10,7 +10,10 @@
 //                                 R·cube ⊇ R·ball = ball. R is the free
 //                                 orientation of the covering — pick it from
 //                                 flowAlignedRotation to align splits with the
-//                                 flow's stretching.
+//                                 flow's stretching. The covering property
+//                                 REQUIRES R orthogonal (asserted in debug
+//                                 builds): a non-orthogonal R silently yields
+//                                 a parallelotope that does NOT enclose E.
 //   ellipsoidIntervalHull(c, L) — the EXACT axis-aligned interval hull of E:
 //                                 per axis i the extent is ‖row_i(L)‖₂ (the
 //                                 support of the unit ball). Note this is the
@@ -23,12 +26,28 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <cassert>
 #include <tax/domain/box.hpp>
 #include <tax/domain/zonotope.hpp>
 #include <tax/la/types.hpp>
 
 namespace tax::domain
 {
+
+namespace detail
+{
+// R·cube ⊇ ball holds iff R is orthogonal — the covering contract of
+// ellipsoidCover. Debug-only guard (mirrors create()'s center check).
+template < class T, class DerivedR >
+[[nodiscard]] inline bool isOrthogonal( const Eigen::MatrixBase< DerivedR >& R,
+                                        T tol = T{ 1e-9 } ) noexcept
+{
+    const auto I =
+        Eigen::Matrix< T, DerivedR::RowsAtCompileTime, DerivedR::ColsAtCompileTime >::Identity(
+            R.rows(), R.cols() );
+    return ( R * R.transpose() - I ).cwiseAbs().maxCoeff() <= tol;
+}
+}  // namespace detail
 
 template < class T, int M, class DerivedL >
 [[nodiscard]] Zonotope< T, M > ellipsoidCover( const tax::la::VecNT< M, T >& center,
@@ -45,6 +64,9 @@ template < class T, int M, class DerivedL, class DerivedR >
                                                const Eigen::MatrixBase< DerivedL >& L,
                                                const Eigen::MatrixBase< DerivedR >& R )
 {
+    assert( detail::isOrthogonal< T >( R ) &&
+            "tax::domain::ellipsoidCover(): R must be orthogonal — a non-orthogonal R does NOT "
+            "cover the ellipsoid" );
     Zonotope< T, M > z;
     z.center = center;
     z.generators = L * R;
