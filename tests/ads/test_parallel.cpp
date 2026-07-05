@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <stdexcept>
 #include <tax/ads/driver.hpp>
 #include <tax/ads/split_criteria.hpp>
 #include <tax/ads/tree.hpp>
@@ -101,4 +102,30 @@ TEST( AdsParallel, DeterministicRunToRun )
     const Tree a = runWith( 8 );
     const Tree b = runWith( 8 );
     expectTreesEqual( a, b );
+}
+
+// Regression (A8): an exception thrown inside a worker (here from the RHS) must
+// propagate out to the caller instead of terminating the process. The work pool
+// captures the first exception, stops, joins, and rethrows.
+TEST( AdsParallel, WorkerExceptionPropagatesToCaller )
+{
+    const double t1 = 2.0 * M_PI;
+    Box< double, M > ic_box{ tax::la::VecNT< M, double >{ 1.0, 0.0 },
+                             tax::la::VecNT< M, double >{ 1.0, 1.0 } };
+    tax::la::VecNT< D, double > center;
+    center << 1.0, 0.0;
+
+    IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-12;
+
+    auto throwing_rhs = []( const auto& x, double ) {
+        using S = std::decay_t< decltype( x ) >;
+        throw std::runtime_error( "boom from rhs" );
+        return S{ x.size() };
+    };
+
+    AdsDriver< Stepper, TruncationCriterion > driver{
+        TruncationCriterion{ /*tol=*/1e-7, /*maxDepth=*/6 }, cfg, {}, /*num_threads=*/4 };
+    EXPECT_THROW( (void)driver.run( throwing_rhs, ic_box, center, /*t0=*/0.0, t1 ),
+                  std::runtime_error );
 }

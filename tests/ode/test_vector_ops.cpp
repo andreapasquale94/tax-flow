@@ -97,8 +97,8 @@ TEST( OdeVectorOps, MixedSchemeDenseExpansion )
     Inner a = x.inner();  // coeff[0]=0.5, coeff[1]=1.0 (the linear term)
     Inner y{};
     tax::ode::VectorOps< Inner >::scale_assign( y, 4.0, a );
-    EXPECT_DOUBLE_EQ( y[0], 2.0 );                                       // 4*0.5
-    EXPECT_DOUBLE_EQ( tax::ode::VectorOps< Inner >::norm( y ), 4.0 );    // 4*1.0
+    EXPECT_DOUBLE_EQ( y[0], 2.0 );                                     // 4*0.5
+    EXPECT_DOUBLE_EQ( tax::ode::VectorOps< Inner >::norm( y ), 4.0 );  // 4*1.0
 
     tax::ode::VectorOps< Inner >::axpy( y, -1.0, a );
     EXPECT_DOUBLE_EQ( y[0], 2.0 - 0.5 );

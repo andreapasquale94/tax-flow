@@ -129,6 +129,28 @@ struct domain_traits< PolynomialZonotope< T, N, M, Storage > >
     static constexpr int dim = M;
 };
 
+// A PZ's center(dim) is only the constant term of value[dim]; two disjoint
+// children split along a factor that enters every component through even powers
+// share identical constant terms, so the default (center-only) domainLess is
+// not a total order and std::sort would order them nondeterministically. Key on
+// the full coefficient vectors instead — disjoint PZ leaves differ in some
+// coefficient, giving a deterministic total order (found via ADL in tax::domain).
+template < class T, int N, int M, class Storage >
+[[nodiscard]] bool domainLess( const PolynomialZonotope< T, N, M, Storage >& a,
+                               const PolynomialZonotope< T, N, M, Storage >& b ) noexcept
+{
+    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
+    for ( std::size_t i = 0; i < static_cast< std::size_t >( M ); ++i )
+        for ( std::size_t k = 0; k < Ncoef; ++k )
+        {
+            const T av = a.value[i][k];
+            const T bv = b.value[i][k];
+            if ( av < bv ) return true;
+            if ( bv < av ) return false;
+        }
+    return false;
+}
+
 // create<P, M>(polyZono, x0): build the identity DA state seeded by a poly
 // zonotope. Component i in [0, M) keeps the zonotope's polynomial generators
 // but overwrites its constant term with the authoritative IC center x0(i)

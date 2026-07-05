@@ -2,10 +2,10 @@
 //
 // E. Fehlberg, "Classical Fifth-, Sixth-, Seventh-, and Eighth-Order
 // Runge-Kutta Formulas with Stepsize Control", NASA TR R-287, 1968.
-// The classical RK 7(8) pair: 13 stages, propagates at order 7,
-// embedded order-8 error estimator (the "Fehlberg coincidence" is a
-// known limitation where the embedded estimator is zero on certain
-// steps; see spec Risks table).
+// The classical RK 7(8) pair, used here in local-extrapolation mode: the
+// shipped `b` weights are the 8th-order set (as in Boost.Odeint's rkf78), so
+// the stepper PROPAGATES at order 8; `b - b_emb` is the O(h^8) error estimate
+// of the embedded order-7 solution that drives step control.
 //
 // Coefficient values reproduced from Boost.Odeint
 //   boost/numeric/odeint/stepper/runge_kutta_fehlberg78.hpp
@@ -16,8 +16,8 @@
 // Layout matches the tax::ode::detail::adaptive_rk_step contract:
 //   c     : nodes  (size n_stages)
 //   a     : lower-triangular row-major  (size n_stages*(n_stages-1)/2)
-//   b     : main weights (size n_stages)  — propagates at order 7
-//   b_emb : embedded weights (size n_stages) — order-8 error estimator
+//   b     : main weights (size n_stages)  — propagates at order 8
+//   b_emb : embedded weights (size n_stages) — order-7 error estimator
 
 #pragma once
 
@@ -28,9 +28,14 @@ namespace tax::ode::detail
 
 struct Fehlberg78Tab
 {
+    // Local extrapolation: `b` is the 8th-order weight set, so the method
+    // propagates at order 8 and the embedded estimator is order 7. The step
+    // controller keys off the embedded order (exponent 1/(order_emb+1) = 1/8).
+    // These two were previously swapped, feeding the controller 1/9 and causing
+    // systematic under-adaptation.
     static constexpr int n_stages = 13;
-    static constexpr int order = 7;
-    static constexpr int order_emb = 8;
+    static constexpr int order = 8;
+    static constexpr int order_emb = 7;
     static constexpr bool fsal = false;
 
     // c[0] = 0.0 (first stage at t), then c2..c13 from Boost.Odeint source.
@@ -88,7 +93,7 @@ struct Fehlberg78Tab
         -1777.0 / 4100.0, 0.0, 0.0, -341.0 / 164.0, 4496.0 / 1025.0, -289.0 / 82.0, 2193.0 / 4100.0,
         51.0 / 82.0, 33.0 / 164.0, 12.0 / 41.0, 0.0, 1.0 };
 
-    // Order-7 propagation weights (Boost b array).
+    // Order-8 propagation weights (Boost b array).
     // Stages 1-5 and 11 do not contribute.
     static constexpr std::array< double, 13 > b{
         0.0,        0.0,         0.0,         0.0, 0.0,          34.0 / 105.0, 9.0 / 35.0,

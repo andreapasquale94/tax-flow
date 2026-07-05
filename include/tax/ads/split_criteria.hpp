@@ -48,7 +48,9 @@ struct TruncationCriterion
         int depth ) const
     {
         if ( depth >= maxDepth ) return false;
-        return totalTopDegreeMass( f ) > T{ tol };
+        // static_cast, not T{tol}: braced init from double is ill-formed (narrows)
+        // for a float instantiation of T.
+        return totalTopDegreeMass( f ) > static_cast< T >( tol );
     }
 
     template < class T, int N, int M, class Storage, int D >

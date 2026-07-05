@@ -62,6 +62,35 @@ PZ curvedPZ()
 }
 }  // namespace
 
+// Regression (A5): domainLess must be a STRICT TOTAL order even when two
+// disjoint children share a center. Splitting a PZ that is even in ξ0 (only
+// ξ0^2 appears) gives children with identical constant terms (centers), so the
+// default center-only order would tie and std::sort would be nondeterministic.
+// The PZ overload keys on the full coefficient vectors, breaking the tie.
+TEST( PolynomialZonotope, DomainLessTotalOrderOnTiedCenters )
+{
+    using tax::domain::domainLess;
+
+    PZ z;
+    // value[0] = 1.0 + 0.1 ξ0^2  (even in ξ0 → children share center 1.0)
+    setCoeff( z.value[0], 0, 0, 1.0 );
+    setCoeff( z.value[0], 2, 0, 0.1 );
+    // value[1] = 0.0 + 1.0 ξ1
+    setCoeff( z.value[1], 0, 1, 1.0 );
+
+    auto [L, R] = z.split( 0 );
+
+    // Centers tie on every axis...
+    for ( int i = 0; i < M; ++i ) EXPECT_DOUBLE_EQ( L.center( i ), R.center( i ) );
+    // ...yet domainLess is antisymmetric and irreflexive: exactly one direction
+    // holds, and neither element is less than itself.
+    const bool lr = domainLess( L, R );
+    const bool rl = domainLess( R, L );
+    EXPECT_TRUE( lr != rl );
+    EXPECT_FALSE( domainLess( L, L ) );
+    EXPECT_FALSE( domainLess( R, R ) );
+}
+
 // ---------------------------------------------------------------------------
 // 1. fromBox reduces to the Box map (degree-1 special case).
 // ---------------------------------------------------------------------------

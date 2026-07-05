@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <tax/la/types.hpp>
@@ -53,6 +54,26 @@ struct EmbeddedRKStepper
 
         const double x_norm = VectorOps< State >::norm( out.x_new );
         const double tol = cfg.abstol + cfg.reltol * x_norm;
+
+        // A non-finite new state OR error norm means the RHS blew up (NaN/Inf)
+        // inside this step — often the step reached into a singularity. Feeding
+        // it to the controller via the `> 0.0` test below would misread a NaN
+        // error as ZERO and grow the step by max_factor, hopping OVER the bad
+        // region; and a NaN x_new can slip through with a FINITE err_norm when
+        // the bad stages cancel in (b - b_emb). Guard both: hard-reject and
+        // halve so the integrator backs off toward the trouble instead of
+        // accepting a NaN state. (x_norm is NaN iff x_new is.)
+        if ( !std::isfinite( x_norm ) || !std::isfinite( out.err_norm ) )
+        {
+            StepResult< State, EmbeddedRKStepper > r;
+            r.x_new = std::move( out.x_new );
+            r.h_used = h;
+            r.data = {};
+            r.h_next = h * 0.5;
+            r.err_norm = out.err_norm;
+            r.accepted = false;
+            return r;
+        }
 
         // Embedded estimators built from stage differences (Feagin's
         // `(k_2 - k_{n-1})`, the "Fehlberg coincidence") can underflow

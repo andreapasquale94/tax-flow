@@ -75,38 +75,57 @@ void parallelDrive( int num_threads, EmptyFn empty, PopFn pop, ProcessFn process
                 continue;  // tasks still running may yet enqueue work
             }
 
-            Item item = pop();
+            // pop() runs under the lock and can throw (it may move/allocate a
+            // work item holding dense DA states). Guard it: a throw here must
+            // stop the pool, not std::terminate.
+            Item item{};
+            try
+            {
+                item = pop();
+            } catch ( ... )
+            {
+                if ( !first_err ) first_err = std::current_exception();
+                stopping = true;
+                cv.notify_all();
+                return;  // lk releases on scope exit
+            }
             ++in_flight;
             lk.unlock();
 
-            // Expensive, lock-free work on copied-out inputs.
-            Verdict verdict{};
+            // Expensive, lock-free work on copied-out inputs, followed by the
+            // locked commit. BOTH are guarded: apply() allocates (arena
+            // push_backs, queue growth), so a std::bad_alloc there must be
+            // captured and rethrown on the caller, never escape the worker.
+            bool produced = false;
+            bool failed = false;
             try
             {
-                verdict = process( std::move( item ) );
+                Verdict verdict = process( std::move( item ) );
+                lk.lock();
+                produced = apply( std::move( verdict ) );
             } catch ( ... )
             {
-                lk.lock();
+                if ( !lk.owns_lock() ) lk.lock();
                 if ( !first_err ) first_err = std::current_exception();
                 stopping = true;
-                --in_flight;
-                cv.notify_all();
-                return;
+                failed = true;
             }
-
-            lk.lock();
-            const bool produced = apply( std::move( verdict ) );
+            // The lock is held here (from apply's lk.lock() or the catch).
             --in_flight;
-            const bool do_notify = produced || ( in_flight == 0 && empty() );
+            const bool do_notify = failed || produced || ( in_flight == 0 && empty() );
             lk.unlock();
             // Notify outside the lock so woken workers don't immediately contend
             // on the mutex we still hold.
             if ( do_notify ) cv.notify_all();
+            if ( failed ) return;
         }
     };
 
     const int n = num_threads < 1 ? 1 : num_threads;
-    std::vector< std::thread > pool;
+    // std::jthread joins on destruction, so a throw from emplace_back mid-spawn
+    // (thread-resource exhaustion) unwinds cleanly instead of terminating on a
+    // still-joinable std::thread.
+    std::vector< std::jthread > pool;
     pool.reserve( static_cast< std::size_t >( n ) );
     for ( int i = 0; i < n; ++i ) pool.emplace_back( worker );
     for ( auto& th : pool ) th.join();

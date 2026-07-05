@@ -13,6 +13,28 @@ GCC 13, Eigen 3.4). **All 45 ctest targets pass.** Examples build with
 were re-verified numerically (row sums, Σb = 1, quadrature order
 conditions): coefficients are correct; one metadata defect (O1 below).
 
+> **Resolution (2026-07-05).** The confirmed bugs have since been **fixed** on
+> this branch, each with a regression test:
+> **O1** Fehlberg78 order metadata (→ 8/7); **O2** GridEvent reset hook (reusable
+> integrator); **O3** rejection retry re-applies the event cap; **O4** PI never
+> grows on a rejected step; **O5** non-finite state/error → hard reject + back
+> off; **O6** Taylor zero-error floor; **O7** `min_step` decoupled from the
+> tmax-remainder tolerance and forced landings smaller than `min_step` allowed;
+> **A1** GridEvent `nextStop` skips coincident grid times; **A2** refine drains
+> the tree work queue; **A3** merge dedups pairs and takes an explicit
+> `mergeTol` + symmetric merged payload; **A4** split-at-`t1` finalizes both
+> children (`AdsTree::splitDone`); **A5** `domainLess` total order (PZ
+> coefficient-lexicographic); **A7** NLI coefficient-scale floor (no spurious
+> `+inf`); **A8** work-pool guards `pop`/`apply` and uses `jthread`. Plus a
+> latent NaN-swallowing bug in the `VectorOps` sup-norms (`std::max(x, NaN)`
+> returns `x`), found while fixing O5: the norms now propagate NaN so a blown-up
+> RHS is rejected, not silently accepted.
+>
+> Still open (improvement-only): **F2** parallel SIGBUS on large DA states;
+> **A6** the degenerate-zonotope `contains` false-negative is documented, not
+> yet solved with an L∞ solve; **P5/P6** example dedup; and the items marked
+> "improvement" in §O8/§A9.
+
 ---
 
 ## 1. Status of the 2026-07-02 review findings

@@ -79,6 +79,37 @@ TEST( AdsTree, SplitRetiresParentAndAppendsChildren )
     EXPECT_EQ( tree.popFront(), R );
 }
 
+// Regression (A4): splitDone bisects a leaf into two children that are DONE
+// immediately — used when the split criterion fires at t1. The parent retires,
+// both children are done (in the done list), never active or queued.
+TEST( AdsTree, SplitDoneFinalizesBothChildren )
+{
+    Tree tree;
+    const int root = tree.init( unitBox(), 7 );
+    (void)tree.popFront();
+
+    auto pr = tree.splitDone( root, /*dim=*/1, /*leftPayload=*/10, /*rightPayload=*/20,
+                              /*tEntry=*/1.0 );
+    const int L = pr.first;
+    const int R = pr.second;
+
+    EXPECT_TRUE( tree.leaf( root ).retired );
+    EXPECT_FALSE( tree.leaf( root ).done );
+    EXPECT_TRUE( tree.leaf( L ).done );
+    EXPECT_TRUE( tree.leaf( R ).done );
+    EXPECT_EQ( tree.leaf( L ).siblingIdx, R );
+    EXPECT_EQ( tree.leaf( R ).siblingIdx, L );
+    EXPECT_EQ( tree.leaf( L ).splitDim, 1 );
+    // No new active leaves, no new work: the children are terminal.
+    EXPECT_EQ( tree.active().size(), 0u );
+    EXPECT_EQ( tree.done().size(), 2u );
+    EXPECT_TRUE( tree.empty() );
+
+    // The two child domains tile the parent along dim 1.
+    EXPECT_DOUBLE_EQ( tree.leaf( L ).domain.halfWidth( 1 ), 0.5 );
+    EXPECT_DOUBLE_EQ( tree.leaf( R ).domain.halfWidth( 1 ), 0.5 );
+}
+
 TEST( AdsTree, FinalizeMovesToDoneList )
 {
     Tree tree;

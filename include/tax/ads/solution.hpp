@@ -218,16 +218,13 @@ class AdsSolution
         return ( std::abs( t ) + T{ 1 } ) * T{ 1e-9 };
     }
 
-    // Sort candidates by canonical center order, assign ids, build a Partition.
+    // Sort candidates into the canonical domain order (tax::domain::domainLess,
+    // via ADL — the same total order AdsTree::canonicalizeDone uses, so ids are
+    // reproducible and match across serial/parallel runs and PZ trees).
     [[nodiscard]] Partition makePartition( T t, std::vector< Cand > cands ) const
     {
         std::sort( cands.begin(), cands.end(), []( const Cand& a, const Cand& b ) {
-            for ( int k = 0; k < M; ++k )
-            {
-                if ( a.domain->center( k ) < b.domain->center( k ) ) return true;
-                if ( b.domain->center( k ) < a.domain->center( k ) ) return false;
-            }
-            return false;
+            return domainLess( *a.domain, *b.domain );
         } );
         Partition p{ t };
         p.reserve( cands.size() );

@@ -69,6 +69,12 @@ struct PI
         else
             raw = pow( tol / denom, alpha * inv ) * pow( tol / err_prev_, -beta * inv );
 
+        // On a step that will be REJECTED (err > tol), the proportional term can
+        // push the factor above 1 when the previous error was much larger,
+        // proposing a retry step BIGGER than the one that just failed. Never
+        // grow on a rejection (Hairer/Wanner II.4): cap the raw factor at 1.
+        if ( denom > tol ) raw = std::min( raw, T{ 1 } );
+
         const T factor = detail::clamp_factor< T >( safety * raw, min_factor, max_factor );
         err_prev_ = denom;
         return h_used * factor;

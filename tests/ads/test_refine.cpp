@@ -152,6 +152,20 @@ TEST( AdsRefine, CoefficientMatchLeavesMatchReference )
     }
 }
 
+// Regression (A2): the refine driver schedules from its own queue, so the
+// returned tree's work queue must be drained — empty() like the classic driver.
+TEST( AdsRefine, ReturnedTreeHasEmptyWorkQueue )
+{
+    const double t1 = 2.0 * M_PI;
+    IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-12;
+    ScState center{ 1.0, 0.0 };
+
+    auto tree = tax::ads::refine< P >( Verner89{}, VolumeRatioCriterion{ 1e-6, 10 }, rhs(), icBox(),
+                                       center, 0.0, t1, cfg );
+    EXPECT_TRUE( tree.empty() );
+}
+
 TEST( AdsRefine, FinerToleranceSplitsMore )
 {
     const double t1 = 2.0 * M_PI;

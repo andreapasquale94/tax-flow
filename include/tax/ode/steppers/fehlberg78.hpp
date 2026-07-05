@@ -1,10 +1,10 @@
 // include/tax/ode/steppers/fehlberg78.hpp
 //
-// Classical Fehlberg 1968 RK 7(8) pair. 13 stages, propagates at order 7,
-// uses an order-8 embedded estimator for adaptive step-size control. Known
-// to suffer from the "Fehlberg coincidence" (embedded estimator zero on
-// certain steps); the shared stepper floors the controller error at
-// machine eps * tol to keep the step size growing in that case.
+// Classical Fehlberg 1968 RK 7(8) pair in local-extrapolation mode. 13 stages,
+// propagates at order 8, uses the embedded order-7 solution for adaptive
+// step-size control. Known to suffer from the "Fehlberg coincidence" (embedded
+// estimator zero on certain steps); the shared stepper floors the controller
+// error at machine eps * tol to keep the step size growing in that case.
 // Implementation: detail::EmbeddedRKStepper over the Fehlberg78 tableau.
 
 #pragma once

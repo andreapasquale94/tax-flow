@@ -68,7 +68,11 @@ struct VectorOps< TaylorExpansion< T, Scheme, storage::Dense > >
     {
         double n = 0.0;
         for ( std::size_t i = 0; i < S::nCoefficients; ++i )
-            n = std::max( n, std::abs( static_cast< double >( x[i] ) ) );
+        {
+            const double a = std::abs( static_cast< double >( x[i] ) );
+            if ( a != a ) return a;  // propagate NaN (std::max would swallow it)
+            n = std::max( n, a );
+        }
         return n;
     }
 
@@ -88,7 +92,11 @@ struct VectorOps< TaylorExpansion< T, Scheme, storage::Dense > >
     {
         double n = 0.0;
         for ( std::size_t i = 0; i < S::nCoefficients; ++i )
-            n = std::max( n, std::abs( static_cast< double >( a[i] - b[i] ) ) );
+        {
+            const double d = std::abs( static_cast< double >( a[i] - b[i] ) );
+            if ( d != d ) return d;  // propagate NaN
+            n = std::max( n, d );
+        }
         return n;
     }
 };
@@ -103,7 +111,12 @@ struct VectorOps< Eigen::Matrix< T, D, 1 > >
     [[nodiscard]] static double norm( const V& x ) noexcept
     {
         double n = 0.0;
-        for ( Eigen::Index i = 0; i < x.size(); ++i ) n = std::max( n, Inner::norm( x( i ) ) );
+        for ( Eigen::Index i = 0; i < x.size(); ++i )
+        {
+            const double a = Inner::norm( x( i ) );
+            if ( a != a ) return a;  // propagate NaN (std::max would swallow it)
+            n = std::max( n, a );
+        }
         return n;
     }
 
@@ -122,7 +135,11 @@ struct VectorOps< Eigen::Matrix< T, D, 1 > >
     {
         double n = 0.0;
         for ( Eigen::Index i = 0; i < a.size(); ++i )
-            n = std::max( n, Inner::diff_norm( a( i ), b( i ) ) );
+        {
+            const double d = Inner::diff_norm( a( i ), b( i ) );
+            if ( d != d ) return d;  // propagate NaN
+            n = std::max( n, d );
+        }
         return n;
     }
 };

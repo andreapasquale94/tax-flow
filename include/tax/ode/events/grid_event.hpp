@@ -32,10 +32,26 @@ class GridEvent final : public BaseEvent< GridEvent< State, T >, State, T >
 
     [[nodiscard]] std::string name() const override { return name_; }
 
+    // Reset the cursor so the same GridEvent can drive a second integrate()
+    // (or a fresh leaf after clone()). Without this a reused event would find
+    // its cursor already past the end and silently record nothing.
+    void reset() override { cursor_ = 0; }
+
     [[nodiscard]] std::optional< T > nextStop( T t ) const override
     {
         for ( std::size_t i = cursor_; i < times_.size(); ++i )
-            if ( times_[i] > t ) return times_[i];
+        {
+            // Skip grid times that essentially coincide with the current time.
+            // A stop within the landing tolerance of `t` would force the
+            // integrator to attempt a sub-ulp step (and throw "step size below
+            // min_step"). This happens when a leaf enters at t = g - 1ulp after
+            // a split clamped onto grid time g: the point is already recorded
+            // (or handled by onStep's tolerance test), so it needs no stop.
+            const T tol = ( std::abs( times_[i] ) + std::abs( t ) ) *
+                              std::numeric_limits< T >::epsilon() * T{ 16 } +
+                          std::numeric_limits< T >::min();
+            if ( times_[i] > t + tol ) return times_[i];
+        }
         return std::nullopt;
     }
 

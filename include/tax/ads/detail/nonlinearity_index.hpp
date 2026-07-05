@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -106,6 +107,7 @@ template < class T, int N, int M, class Storage, int D >
     const Eigen::Matrix< tax::TaylorExpansion< T, tax::IsotropicScheme< N, M >, Storage >, D, 1 >&
         f )
 {
+    constexpr std::size_t Ncoef = tax::numMonomials( N, M );
     double best = 0.0;
     for ( Eigen::Index i = 0; i < f.size(); ++i )
     {
@@ -114,12 +116,22 @@ template < class T, int N, int M, class Storage, int D >
         T var_l1{ 0 };
         for ( int j = 0; j < M; ++j ) var_l1 += var[static_cast< std::size_t >( j )];
         const T lin = linRowBound( row );
-        if ( lin <= T{ 0 } )
-        {
-            if ( var_l1 > T{ 0 } ) best = std::numeric_limits< double >::infinity();
-            continue;
-        }
-        const double ratio = static_cast< double >( var_l1 ) / static_cast< double >( lin );
+
+        // Floor both terms by the row's coefficient scale so numerically-zero
+        // coefficients don't dominate the ratio. Without this a singular
+        // Jacobian row (lin == 0) with any nonzero curvature — even 1e-300
+        // round-off — reported an INFINITE index and forced splitting all the
+        // way to maxDepth. Curvature below the floor is treated as noise (ratio
+        // 0); genuine curvature with a vanishing linear part still yields a
+        // large finite ratio and splits when it should.
+        T rowScale{ 0 };
+        for ( std::size_t k = 0; k < Ncoef; ++k )
+            rowScale = std::max( rowScale, std::abs( row[k] ) );
+        const T floor = rowScale * std::numeric_limits< T >::epsilon() * T{ 16 };
+
+        if ( var_l1 <= floor ) continue;  // no meaningful nonlinearity in this row
+        const T linEff = std::max( lin, floor );
+        const double ratio = static_cast< double >( var_l1 ) / static_cast< double >( linEff );
         if ( ratio > best ) best = ratio;
     }
     return best;

@@ -75,6 +75,16 @@ TEST( OdeFehlberg78Stepper, HarmonicOneStep )
     EXPECT_NEAR( r.x_new( 1 ), -std::sin( 0.05 ), 1e-10 );
 }
 
+// Regression (O1): the method propagates at order 8 (local extrapolation) with
+// an embedded order-7 estimator. The metadata (which drives the step-controller
+// exponent 1/(order_emb+1) = 1/8) must reflect that, not the swapped 7/8.
+TEST( OdeFehlberg78Stepper, OrderMetadataIsEightSevenPair )
+{
+    using State = tax::la::VecNT< 1, double >;
+    EXPECT_EQ( Fehlberg78Stepper< State >::order_v, 8 );
+    EXPECT_EQ( Fehlberg78Stepper< State >::order_emb_v, 7 );
+}
+
 TEST( OdeFehlberg78Stepper, ControllerIVariant )
 {
     using State = tax::la::VecNT< 1, double >;

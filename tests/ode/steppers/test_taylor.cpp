@@ -16,6 +16,31 @@ using tax::ode::TaylorStepper;
 using tax::ode::controllers::JorbaZou;
 using tax::ode::controllers::PI;
 
+// Regression (O6): a Taylor integrator with a generic I/PI controller on a
+// polynomial RHS (exact zero top-order coefficients) must not stall. Before the
+// fix the zero truncation indicator made the controller SHRINK every step until
+// it died with "step size below min_step". x' = 2t, x(0)=0 ⇒ x(t)=t² exactly.
+TEST( OdeTaylorStepper, ZeroErrorPolynomialRhsCompletesWithPI )
+{
+    using State = tax::la::VecNT< 1, double >;
+    const auto f = []( const auto& x, const auto& t ) {
+        using S = std::decay_t< decltype( x ) >;
+        S out{ x.size() };
+        out( 0 ) = 2.0 * t;  // note: independent of x, degree-1 in t
+        return out;
+    };
+
+    IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-12;
+
+    tax::ode::Taylor< 8, State, PI< double >, decltype( f ) > integ{ f, cfg };
+    State x0;
+    x0( 0 ) = 0.0;
+    auto sol = integ.integrate( x0, 0.0, 1.0 );
+    EXPECT_DOUBLE_EQ( sol.t.back(), 1.0 );
+    EXPECT_NEAR( sol.x.back()( 0 ), 1.0, 1e-10 );  // x(1) = 1
+}
+
 TEST( OdeTaylorStepper, ExponentialOneStep )
 {
     using State = tax::la::VecNT< 1, double >;

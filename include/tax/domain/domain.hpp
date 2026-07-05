@@ -56,4 +56,22 @@ concept LocatableDomain =
         // splitOrdinate(dim): scalar sibling ordering along the split factor.
         { d.splitOrdinate( dim ) } -> std::convertible_to< domain_scalar_t< D > >;
     };
+
+// Deterministic strict total order over domains, used to canonicalize the order
+// of done leaves / partition members so serial and parallel runs agree. The
+// default keys on the per-axis centers (disjoint Box/Zonotope leaves have
+// distinct centers). Primitives whose center is NOT discriminating between
+// disjoint leaves (e.g. PolynomialZonotope, whose center is a constant term
+// that can tie for children split along an even-power axis) overload this in
+// their own namespace; ADL picks the specialization.
+template < class D >
+[[nodiscard]] bool domainLess( const D& a, const D& b ) noexcept
+{
+    for ( int i = 0; i < domain_dim_v< D >; ++i )
+    {
+        if ( a.center( i ) < b.center( i ) ) return true;
+        if ( b.center( i ) < a.center( i ) ) return false;
+    }
+    return false;
+}
 }  // namespace tax::domain

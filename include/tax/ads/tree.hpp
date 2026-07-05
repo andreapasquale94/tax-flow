@@ -81,6 +81,11 @@ class AdsTree
         return idx;
     }
 
+    // Discard any pending work-queue entries. Used by drivers (e.g. the refine
+    // driver) that schedule from their own queue instead of this one, so the
+    // returned tree reports empty()==true like the classic driver's.
+    void clearWorkQueue() noexcept { workQueue_.clear(); }
+
     [[nodiscard]] std::pair< int, int > split( int idx, int dim, Payload leftPayload,
                                                Payload rightPayload, T tEntry )
     {
@@ -133,6 +138,57 @@ class AdsTree
         return { lIdx, rIdx };
     }
 
+    // Split a leaf into two already-DONE children — no re-integration. Used when
+    // the split criterion fires exactly at the final time t1: the parent's flow
+    // map is complete, so tax::ads::split of it IS the pair of final child flow
+    // maps. The children are wired like split()'s (parent/sibling links) but go
+    // straight into doneList_, never onto the active list or work queue.
+    [[nodiscard]] std::pair< int, int > splitDone( int idx, int dim, Payload leftPayload,
+                                                   Payload rightPayload, T tEntry )
+    {
+        assert( idx >= 0 && idx < static_cast< int >( leaves_.size() ) );
+        assert( !leaves_[idx].done && !leaves_[idx].retired );
+
+        leaves_[idx].retired = true;
+        removeFromActive( idx );
+
+        auto pr = leaves_[idx].domain.split( dim );
+        const int parentDepth = leaves_[idx].depth;
+
+        LeafT L{};
+        L.domain = std::move( pr.first );
+        L.payload = std::move( leftPayload );
+        L.depth = parentDepth + 1;
+        L.parentIdx = idx;
+        L.splitDim = dim;
+        L.tEntry = tEntry;
+        L.done = true;
+
+        LeafT R{};
+        R.domain = std::move( pr.second );
+        R.payload = std::move( rightPayload );
+        R.depth = parentDepth + 1;
+        R.parentIdx = idx;
+        R.splitDim = dim;
+        R.tEntry = tEntry;
+        R.done = true;
+
+        const int lIdx = static_cast< int >( leaves_.size() );
+        leaves_.push_back( std::move( L ) );
+        listPos_.push_back( -1 );
+        const int rIdx = static_cast< int >( leaves_.size() );
+        leaves_.push_back( std::move( R ) );
+        listPos_.push_back( -1 );
+
+        leaves_[lIdx].siblingIdx = rIdx;
+        leaves_[rIdx].siblingIdx = lIdx;
+
+        pushDone( lIdx );
+        pushDone( rIdx );
+
+        return { lIdx, rIdx };
+    }
+
     void finalize( int idx )
     {
         assert( idx >= 0 && idx < static_cast< int >( leaves_.size() ) );
@@ -152,6 +208,10 @@ class AdsTree
         const int parent = leaves_[leftIdx].parentIdx;
         assert( parent >= 0 );
         assert( leaves_[parent].retired );
+        // Children MUST be done (in doneList_): removeFromDone below indexes via
+        // listPos_, which for an active leaf points into activeList_ and would
+        // silently corrupt both lists in a release build.
+        assert( leaves_[leftIdx].done && leaves_[rightIdx].done );
 
         // Both children become retired; the parent revives as done.
         // Preconditions above guarantee the children are in doneList_, not
@@ -187,22 +247,16 @@ class AdsTree
         return { doneList_.data(), doneList_.size() };
     }
 
-    // Reorder the done-leaf index list into a canonical, deterministic
-    // order: ascending domain center, lexicographic over the M coordinates.
-    // Disjoint domains have distinct centers, so this is a stable total
-    // order independent of insertion order — used to make parallel and
-    // serial propagation agree and to make output reproducible.
+    // Reorder the done-leaf index list into a canonical, deterministic order via
+    // tax::domain::domainLess (a strict total order over disjoint domains, found
+    // by ADL — center-lexicographic by default, coefficient-lexicographic for
+    // PolynomialZonotope). Independent of insertion order, so parallel and serial
+    // propagation agree and output is reproducible.
     void canonicalizeDone()
     {
         std::sort( doneList_.begin(), doneList_.end(), [this]( int a, int b ) {
-            const auto& da = leaves_[static_cast< std::size_t >( a )].domain;
-            const auto& db = leaves_[static_cast< std::size_t >( b )].domain;
-            for ( int i = 0; i < M; ++i )
-            {
-                if ( da.center( i ) < db.center( i ) ) return true;
-                if ( db.center( i ) < da.center( i ) ) return false;
-            }
-            return false;
+            return domainLess( leaves_[static_cast< std::size_t >( a )].domain,
+                               leaves_[static_cast< std::size_t >( b )].domain );
         } );
         for ( std::size_t i = 0; i < doneList_.size(); ++i )
             listPos_[static_cast< std::size_t >( doneList_[i] )] = static_cast< int >( i );

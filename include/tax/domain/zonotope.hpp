@@ -80,12 +80,18 @@ struct Zonotope
         return z;
     }
 
-    // Factor coordinates of pt: the minimum-norm ξ with G·ξ = pt - center.
-    // Uses a rank-revealing decomposition, so rank-deficient generator
-    // matrices (e.g. deliberately zeroed inactive axes) are handled: the
-    // null-space component of ξ is 0, mirroring Box::localize on zero-width
-    // axes. Whether pt actually lies on the (possibly degenerate) set is
-    // contains()'s job — it additionally checks the reconstruction residual.
+    // Factor coordinates of pt: the minimum-L2-norm ξ with G·ξ = pt - center,
+    // via a rank-revealing decomposition. ZERO generator columns (deliberately
+    // inactive axes) are handled exactly: their factor is 0, mirroring
+    // Box::localize on zero-width axes.
+    //
+    // CAVEAT — degenerate G with linearly DEPENDENT (nonzero) columns: the
+    // minimum-L2 solution is not the minimum-L∞ one, so a point genuinely inside
+    // such a (lower-dimensional) parallelotope can localize with ‖ξ‖∞ > 1 and be
+    // rejected by contains(). localize/contains/locate are therefore reliable
+    // only for a full-rank G or a G degenerate solely through zero columns; for a
+    // rank-deficient G with dependent columns contains() may return a false
+    // negative (fail-safe: "not covered" rather than a wrong owner).
     template < class Derived >
     [[nodiscard]] tax::la::VecNT< M, T > localize( const Eigen::MatrixBase< Derived >& pt ) const
     {

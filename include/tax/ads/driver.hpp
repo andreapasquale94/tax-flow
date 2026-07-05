@@ -94,7 +94,8 @@ class AdsDriver
     // finalize with a flow-map payload. Computed lock-free in stepLeaf.
     struct LeafVerdict
     {
-        bool split = false;
+        bool split = false;       // split into two children, re-propagate them
+        bool splitFinal = false;  // split at t1: finalize both children directly
         int dim = -1;
         T splitTime{};
         State left{};
@@ -117,23 +118,23 @@ class AdsDriver
             std::make_shared< SplitEvent< State, T, Criterion > >( crit_, depth, &req ) );
         auto sol = integ.integrate( payload, tEntry, t1 );
 
-        // Guard against a split fired at (or beyond) the final time —
-        // splitting would queue two children with tEntry == t1, and the
-        // integrator rejects empty intervals.
+        // A split fired at (or beyond) the final time cannot re-propagate its
+        // children (tEntry == t1 is an empty interval the integrator rejects).
+        // But the parent's flow map at t1 IS complete, so we split it and mark
+        // both children done directly rather than discarding the split and
+        // leaving an over-tolerance leaf in the final partition.
         const bool atFinal = req.fired && !( req.t < t1 );
 
         LeafVerdict v;
-        if ( req.fired && !atFinal )
+        if ( req.fired )
         {
-            v.split = true;
             v.dim = req.dim;
             v.splitTime = req.t;
             auto pr = tax::ads::split( sol.x.back(), req.dim );
             v.left = std::move( pr.first );
             v.right = std::move( pr.second );
-        } else
-        {
-            v.split = false;
+            v.split = !atFinal;
+            v.splitFinal = atFinal;
         }
         v.leafSol = std::move( sol );  // capture events + steps (read sol.x.back() above first)
         return v;
@@ -156,6 +157,15 @@ class AdsDriver
             {
                 (void)tree.split( idx, v.dim, std::move( v.left ), std::move( v.right ),
                                   v.splitTime );
+            } else if ( v.splitFinal )
+            {
+                const auto [c1, c2] =
+                    tree.splitDone( idx, v.dim, std::move( v.left ), std::move( v.right ), t1 );
+                // Keep leafSol parallel to the arena: the two terminal children
+                // were never integrated, so they carry empty ode::Solutions.
+                if ( static_cast< int >( leafSol.size() ) <= c2 )
+                    leafSol.resize( static_cast< std::size_t >( c2 ) + 1 );
+                (void)c1;
             } else
             {
                 tree.leaf( idx ).payload = v.leafSol.x.back();
@@ -224,6 +234,14 @@ class AdsDriver
                     (void)tree.split( idx, v.dim, std::move( v.left ), std::move( v.right ),
                                       v.splitTime );
                     produced = true;  // two new leaves are now available to claim
+                } else if ( v.splitFinal )
+                {
+                    const auto [c1, c2] =
+                        tree.splitDone( idx, v.dim, std::move( v.left ), std::move( v.right ), t1 );
+                    if ( static_cast< int >( leafSol.size() ) <= c2 )
+                        leafSol.resize( static_cast< std::size_t >( c2 ) + 1 );
+                    (void)c1;
+                    produced = false;  // terminal children — nothing to claim
                 } else
                 {
                     tree.leaf( idx ).payload = v.leafSol.x.back();

@@ -101,6 +101,11 @@ class AdsRefineDriver
 
         drive( rhs, tree, std::move( seed ), t0, t1 );
 
+        // The refine driver schedules from its own WorkItem queue; init()/split()
+        // still enqueue onto the tree's work queue, which nothing here drains.
+        // Clear it so the returned tree reports empty()==true (and front() never
+        // yields a retired/done leaf) like the classic AdsDriver's tree.
+        tree.clearWorkQueue();
         tree.canonicalizeDone();
         return tree;
     }
