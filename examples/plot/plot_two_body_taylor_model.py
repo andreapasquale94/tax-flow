@@ -64,7 +64,7 @@ for i, s in enumerate(snaps):
     ax.fill(s["poly"]["x"], s["poly"]["y"], color=col, alpha=0.55, lw=0.8, ec=col, zorder=3)
 
 # rigorous hull rectangles on the recording grid (every 4th to avoid clutter)
-for h in single["hulls"][:: 4]:
+for h in single["hulls"][::6]:
     ax.add_patch(
         Rectangle(
             (h["cx"] - h["hx"], h["cy"] - h["hy"]), 2 * h["hx"], 2 * h["hy"],
@@ -74,9 +74,9 @@ for h in single["hulls"][:: 4]:
 
 reached = params["single_reached"]
 ax.set_title(
-    f"One validated Taylor model over the IC box  (P={int(params['P'])})\n"
-    f"polynomial images (filled) + rigorous interval hulls (red); "
-    f"run verified up to t = {reached:.2f} of {T:.2f}"
+    f"One validated Taylor model over the IC box (P={int(params['P'])})\n"
+    f"polynomial images (filled), rigorous hulls (red) — verified to t = {reached:.2f} of {T:.2f}",
+    fontsize=10,
 )
 ax.set_xlabel("x")
 ax.set_ylabel("y")
@@ -90,27 +90,28 @@ plt.close(fig)
 fig, ax = plt.subplots(figsize=(7.2, 4.4))
 t1 = np.array(single["t"])
 rem = np.maximum.reduce([np.array(single[f"rem{i}"]) for i in range(4)])
-mask = rem > 0
+mask = rem > 1e-12  # drop the exact-zero start (denormal floor)
 ax.semilogy(t1[mask], rem[mask], color="crimson", lw=1.6, label="single Taylor model")
+
+t2 = np.array(ads["snap_t"])
+r2 = np.array(ads["snap_rem_max"])
+m2 = r2 > 1e-12
+ax.semilogy(t2[m2], r2[m2], "o-", color="tab:blue", lw=1.6, ms=4,
+            label=f"ADS, worst leaf ({int(params['ads_leaves'])} leaves)")
+
+ax.set_ylim(3e-9, 1.0)
 if reached < T - 1e-9:
     ax.axvline(reached, color="crimson", ls=":", lw=1.2)
     ax.annotate(
         "verification fails —\nsingle model cannot continue",
-        xy=(reached, rem[mask][-1]), xytext=(reached - 2.6, rem[mask][-1] * 0.5),
+        xy=(reached, rem[mask][-1]), xytext=(reached - 2.4, 3e-3),
         fontsize=8, color="crimson",
         arrowprops=dict(arrowstyle="->", color="crimson", lw=0.8),
     )
 
-t2 = np.array(ads["snap_t"])
-r2 = np.array(ads["snap_rem_max"])
-m2 = r2 > 0
-ax.semilogy(t2[m2], r2[m2], "o-", color="tab:blue", lw=1.6, ms=4,
-            label=f"ADS, worst leaf ({int(params['ads_leaves'])} leaves)")
-
-for frac, lab in [(0.0, "periapsis"), (0.5, "apoapsis"), (1.0, "periapsis")]:
-    ax.axvline(frac * T, color="0.85", lw=0.8, zorder=0)
-    ax.text(frac * T, ax.get_ylim()[0] * 1.4, f" {lab}", fontsize=7, color="0.5",
-            rotation=90, va="bottom")
+for tmark, lab in [(0.0, "periapsis"), (np.pi, "apoapsis")]:
+    ax.axvline(tmark, color="0.85", lw=0.8, zorder=0)
+    ax.text(tmark, 5e-9, f" {lab}", fontsize=7, color="0.5", rotation=90, va="bottom")
 
 ax.set_xlabel("t")
 ax.set_ylabel("max remainder width (rigorous error bound)")

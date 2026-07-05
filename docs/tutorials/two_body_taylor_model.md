@@ -83,16 +83,17 @@ And the run does not finish. Watch the remainder:
 
 ![Remainder growth: single model vs ADS](img/two_body_tm_remainder.png)
 
-The remainder (red) grows mildly along the far arc of the orbit, then
-explodes as the box returns to periapsis: the flow's curvature over the
-*whole* stretched set becomes too strong for one degree-\(P\) polynomial, the
-Picard remainder map stops being contractive at any step size, and
-verification fails — the stepper rejects until the integrator gives up. **A
-single validated model cannot complete this orbit.** This is not a weakness
-of the implementation; it is the honest price of a guaranteed error bound.
-(The classic `TaylorExpansion` run in the [two-body tutorial](two_body.md)
-"completes" the same orbit — silently wrong near periapsis, as its
-Monte-Carlo validation shows.)
+The remainder (red) grows exponentially along the orbit — every step sweeps
+the polynomial's uncovered truncation into the interval, and the stretching
+flow amplifies what is already there. Just past apoapsis the enclosure
+becomes so wide that the Picard remainder map stops being contractive at any
+step size; verification fails and the stepper rejects until the integrator
+gives up, at \(t \approx 3.85\) of the \(2\pi\) period. **A single
+validated model cannot even reach the periapsis return.** This is not a
+weakness of the implementation; it is the honest price of a guaranteed error
+bound. (The classic `TaylorExpansion` run in the
+[two-body tutorial](two_body.md) "completes" the same orbit — silently
+degrading near periapsis, as its Monte-Carlo validation shows.)
 
 ## Act 2 — ADS makes rigor scale
 
@@ -102,8 +103,8 @@ shape as the classic pipeline — only the method tag changes:
 ```cpp
 auto sol = tax::ads::propagate<P>(
     tax::ode::methods::Picard{},
-    tax::ads::TruncationCriterion{1e-3, 8},
-    rhs(), ic_box, icCenter(), 0.0, kPeriod, cfg);
+    tax::ads::TruncationCriterion{3e-5, 10},
+    rhs(), ic_box, icCenter(), 0.0, /*t1=*/4.6, cfg);
 ```
 
 When a leaf's polynomial **truncation frontier** exceeds tolerance, the leaf
@@ -122,10 +123,21 @@ splittable structure; a custom criterion may key on it directly via
 
 ![Final IC-box partition, colored by remainder](img/two_body_tm_partition.png)
 
-The blue curve in the remainder figure above tells the story: the **worst
-leaf** of the ADS run reaches \(t = T\) with an enclosure orders of magnitude
-tighter than where the single model died. Splitting is what makes validated
-integration *scale*.
+The blue curve in the remainder figure above tells the story: the ADS run
+sails past the point where the single model died and completes the target
+horizon \(t = 4.6\) — periapsis to apoapsis and most of the way back — with
+every leaf still verified. Splitting is what makes validated integration
+*scale*: each split cuts the leaf's truncation mass by \(\sim 2^{P-1}\),
+which is exactly the term feeding the remainder.
+
+One honest caveat, measured rather than hidden: the **full** \(e = 0.5\)
+revolution is out of reach at this box size no matter how finely ADS splits.
+The remainder a leaf has already accumulated is *inherited* by its children,
+and the interval (box) transport of that remainder suffers the classic
+**wrapping effect** through the periapsis return — the amplification is
+multiplicative and split-independent. The literature's remedy (shrink
+wrapping / preconditioned remainders, Makino & Berz) belongs in a future
+`tax::model` iteration.
 
 The partition also shows *where* rigor is expensive: leaves are finest along
 the direction that controls the periapsis passage — the same anisotropy the
@@ -195,13 +207,13 @@ rationale at the call site:
 ## Numbers
 
 With the defaults in the example (`P = 5`, box `y0 ± 8·10⁻³`,
-`vy0 ± 2·10⁻²`, `e = 0.5`, one period):
+`vy0 ± 2·10⁻²`, `e = 0.5`, horizon `T = 4.6` ≈ 73 % of the period):
 
-| | single Taylor model | ADS (`tol = 10⁻³`) |
+| | single Taylor model | ADS (`tol = 3·10⁻⁵`) |
 |---|---|---|
-| completes the orbit | **no** — dies near second periapsis | **yes** |
-| final worst remainder | — (blew up) | see banner/JSON |
-| Monte-Carlo containment | — | every located sample |
+| reaches `T = 4.6` | **no** — verification fails at `t ≈ 3.85` | **yes** (16 leaves, depth ≤ 4) |
+| wall-clock | ~10 s (incl. the capped death) | ~5 s on 4 threads |
+| Monte-Carlo containment | — | every located sample inside its enclosure |
 
 Run it yourself:
 

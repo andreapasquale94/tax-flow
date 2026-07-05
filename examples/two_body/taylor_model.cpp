@@ -61,12 +61,21 @@ constexpr int M = 4;  // factor dimension (state dimension here)
 constexpr int D = 4;  // state dimension
 
 constexpr double kOdeTol = 1e-7;  // Picard τ-truncation tolerance
-constexpr double kAdsTol = 1e-3;  // ADS truncation-frontier tolerance
-constexpr int kMaxDepth = 8;      // ADS depth cap
-constexpr int kSegments = 64;     // piecewise recording grid for the single run
-constexpr int kNSnaps = 9;        // snapshot times for polygons (0 .. T, 45°)
-constexpr int kNPerEdge = 24;     // boundary samples per IC-box edge
-constexpr int kNMc = 160;         // Monte-Carlo validation samples
+constexpr double kAdsTol = 3e-5;  // ADS truncation-frontier tolerance
+constexpr int kMaxDepth = 10;     // ADS depth cap
+
+// Validated horizon: periapsis → apoapsis → most of the way back (73% of the
+// e = 0.5 period). The single global model dies just past apoapsis; ADS
+// completes this horizon. The FULL revolution is out of reach for naive
+// interval remainder transport at this box size — the wrapping effect
+// amplifies every leaf's inherited remainder through the periapsis return
+// regardless of how finely the domain is split (the literature's remedy,
+// shrink wrapping / preconditioned remainders, is future tax::model work).
+inline const double kTFinal = 4.6;
+constexpr int kSegments = 64;  // piecewise recording grid for the single run
+constexpr int kNSnaps = 9;     // snapshot times for polygons (0 .. T, 45°)
+constexpr int kNPerEdge = 24;  // boundary samples per IC-box edge
+constexpr int kNMc = 160;      // Monte-Carlo validation samples
 
 using TM = tax::model::TaylorModel< double, P, M >;
 using State = Eigen::Matrix< TM, D, 1 >;
@@ -149,7 +158,7 @@ void writeZono2( std::ostream& os, const char* key, const Eigen::Vector2d& c,
 
 int main()
 {
-    const double t_final = kPeriod;
+    const double t_final = kTFinal;
     const auto ic_box = icBox();
     const auto boundary = unitSquareBoundary( kNPerEdge );
 
