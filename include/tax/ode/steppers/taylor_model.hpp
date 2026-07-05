@@ -48,6 +48,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <stdexcept>
 #include <tax/domain/model.hpp>
 #include <tax/la/types.hpp>
 #include <tax/model.hpp>
@@ -261,33 +262,51 @@ struct TaylorModelStepper
             return next;
         };
 
-        // --- 2. Polynomial fixed point: each pass settles one more τ-order.
-        Lifted cand = ic;
-        for ( int k = 0; k <= N; ++k ) cand = picard( cand );
-
-        // --- 3. Verification with ε-inflation: T(cand) ⊆ cand ⇒ the true flow
-        //         lies in cand, hence also in T(cand) (which is what we keep).
+        // Picard applications can legitimately throw std::domain_error /
+        // std::invalid_argument from tax::model math (e.g. sqrt/log/division
+        // whose ARGUMENT ENCLOSURE over the whole (ξ, τ) box strays out of
+        // domain when h is too large — near a two-body periapsis the state
+        // sweeps a wide arc within one trial step). That is not an error of
+        // the integration, it is "this step is too big": report the step as
+        // not validated so the integrator rejects it and halves h.
         bool validated = false;
+        Lifted cand = ic;
         Lifted ver{ x.size() };
-        for ( int attempt = 0; attempt <= kMaxInflate; ++attempt )
+        try
         {
-            ver = picard( cand );
-            bool included = true;
-            for ( Eigen::Index i = 0; i < x.size() && included; ++i )
-                included = cand( i ).remainder().contains( ver( i ).remainder() );
-            if ( included )
+            // --- 2. Polynomial fixed point: each pass settles one more τ-order.
+            for ( int k = 0; k <= N; ++k ) cand = picard( cand );
+
+            // --- 3. Verification with ε-inflation: T(cand) ⊆ cand ⇒ the true
+            //         flow lies in cand, hence also in T(cand) (which we keep).
+            for ( int attempt = 0; attempt <= kMaxInflate; ++attempt )
             {
-                validated = true;
-                break;
+                ver = picard( cand );
+                bool included = true;
+                for ( Eigen::Index i = 0; i < x.size() && included; ++i )
+                    included = cand( i ).remainder().contains( ver( i ).remainder() );
+                if ( included )
+                {
+                    validated = true;
+                    break;
+                }
+                // Inflate: take the (larger) verification iterate and widen it.
+                for ( Eigen::Index i = 0; i < x.size(); ++i )
+                {
+                    const IntervalT rem = ver( i ).remainder();
+                    const T d = T{ 0.1 } * rem.width() + std::numeric_limits< T >::denorm_min();
+                    cand( i ) = ver( i );
+                    cand( i ).remainder() += IntervalT{ -d, d };
+                }
             }
-            // Inflate: take the (larger) verification iterate and widen it.
-            for ( Eigen::Index i = 0; i < x.size(); ++i )
-            {
-                const IntervalT rem = ver( i ).remainder();
-                const T d = T{ 0.1 } * rem.width() + std::numeric_limits< T >::denorm_min();
-                cand( i ) = ver( i );
-                cand( i ).remainder() += IntervalT{ -d, d };
-            }
+        } catch ( const std::domain_error& )
+        {
+            out = x;  // keep `out` well-formed for the event re-step path
+            return CoreResult{};
+        } catch ( const std::invalid_argument& )
+        {
+            out = x;
+            return CoreResult{};
         }
 
         // --- 4. τ-truncation masses of the flow polynomial (per-row sums over

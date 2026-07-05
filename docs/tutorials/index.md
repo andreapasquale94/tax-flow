@@ -35,6 +35,14 @@ scripts in `examples/plot/` turn those into the figures shown here
     initial conditions wherever the answer changes. Fully parallel, and it
     converges onto a Monte-Carlo reference as the box count grows.
 
+-   **[Validated Taylor models](two_body_taylor_model.md)**
+
+    ---
+
+    The same orbit with a *guaranteed* error bound: Taylor models carry a
+    rigorous remainder through the integration, one global model fails at
+    periapsis — and ADS turns rigor into something that scales.
+
 -   **[Three-body problem](three_body.md)**
 
     ---
