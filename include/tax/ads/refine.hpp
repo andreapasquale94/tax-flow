@@ -1,6 +1,6 @@
 // include/tax/ads/refine.hpp
 //
-// RefineDriver / refine — a "propagate-then-assess" alternative to the
+// AdsRefineDriver / refine — a "propagate-then-assess" alternative to the
 // classic in-flight ADS driver.
 //
 // The classic AdsDriver splits a box the moment a flow map stops
@@ -23,26 +23,27 @@
 //       tax::ads::CoefficientMatchCriterion{ /*tol=*/1e-6, /*maxDepth=*/7 },
 //       rhs, ic_box, ic_center, t0, t1, cfg, n_threads );
 //
-// The result is the same AdsTree<State, M, T> the classic driver returns:
-// tree.done() lists the accepted leaves, each carrying the flow map valid
-// on its sub-box.
+// The result is a bare AdsTree<State, M, T> (not AdsSolution — refine does
+// not capture per-leaf Solutions). tree.done() lists the accepted leaves,
+// each carrying the flow map valid on its sub-box. The classic driver's
+// tax::ads::propagate() returns AdsSolution<Stepper, M> instead.
 
 #pragma once
 
-#include <condition_variable>
 #include <deque>
-#include <exception>
-#include <mutex>
 #include <span>
-#include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/detail/work_pool.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/create.hpp>
+#include <tax/domain/detail/substitute_axis.hpp>
 #include <tax/la/types.hpp>
+#include <tax/ode/config.hpp>
 #include <tax/ode/integrator.hpp>
 #include <tax/ode/propagate.hpp>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -51,7 +52,7 @@ namespace tax::ads
 {
 
 template < class Stepper, class Quality >
-class RefineDriver
+class AdsRefineDriver
 {
    public:
     using State = typename Stepper::State;
@@ -63,8 +64,8 @@ class RefineDriver
     static constexpr int M = TE::vars_v;
     static constexpr int D = State::RowsAtCompileTime;
 
-    using Tree = AdsTree< State, M, T >;
-    using BoxT = Box< T, M >;
+    using Tree = AdsTree< State, tax::domain::Box< T, M > >;
+    using BoxT = tax::domain::Box< T, M >;
 
     // See AdsDriver: the refine driver also uses Stepper::T as the real scalar.
     static_assert( std::is_floating_point_v< T >,
@@ -74,7 +75,7 @@ class RefineDriver
     // split_dirs > 1 turns on aggressive multi-way refinement: a box that
     // fails the quality test is split along its top-`split_dirs` directions
     // at once, into 2^split_dirs children, instead of bisecting one axis.
-    RefineDriver( Quality quality, Cfg cfg, int num_threads = 1, int split_dirs = 1 )
+    AdsRefineDriver( Quality quality, Cfg cfg, int num_threads = 1, int split_dirs = 1 )
         : quality_( std::move( quality ) ),
           cfg_( std::move( cfg ) ),
           num_threads_( num_threads < 1 ? 1 : num_threads ),
@@ -87,7 +88,7 @@ class RefineDriver
                             T t0, T t1 )
     {
         Tree tree;
-        State root_init = tax::ads::create< N, M >( ic_box, ic_center );
+        State root_init = tax::domain::create< N, M >( ic_box, ic_center );
         const int rootIdx = tree.init( ic_box, State{}, t0 );
 
         // The root is the only box not propagated as someone's child, so
@@ -100,6 +101,11 @@ class RefineDriver
 
         drive( rhs, tree, std::move( seed ), t0, t1 );
 
+        // The refine driver schedules from its own WorkItem queue; init()/split()
+        // still enqueue onto the tree's work queue, which nothing here drains.
+        // Clear it so the returned tree reports empty()==true (and front() never
+        // yields a retired/done leaf) like the classic AdsDriver's tree.
+        tree.clearWorkQueue();
         tree.canonicalizeDone();
         return tree;
     }
@@ -157,7 +163,8 @@ class RefineDriver
             {
                 const T shift = ( ( c >> j ) & 1u ) ? T{ 0.5 } : T{ -0.5 };
                 for ( Eigen::Index r = 0; r < ci.size(); ++r )
-                    ci( r ) = detail::substituteAxis( ci( r ), dims[j], shift, T{ 0.5 } );
+                    ci( r ) =
+                        tax::domain::detail::substituteAxis( ci( r ), dims[j], shift, T{ 0.5 } );
             }
             flows[c] = propagateLeaf( rhs, ci, t0, t1 );
             inits[c] = std::move( ci );
@@ -177,56 +184,43 @@ class RefineDriver
 
     // num_threads_ workers pull WorkItems from a shared queue. The expensive
     // assess() (two propagations) runs lock-free on copied-out inputs; the
-    // mutex guards only the queue and the tree mutation plus the in-flight
-    // counter. Termination: queue empty AND nothing in flight. The first
-    // worker exception wins and is rethrown on the calling thread.
+    // shared work-pool (detail::parallelDrive) guards only the queue and the
+    // tree mutation plus the in-flight counter, and owns termination, exception
+    // capture, and the notify policy.
     template < class F >
     void drive( const F& rhs, Tree& tree, std::deque< WorkItem > queue, T t0, T t1 )
     {
-        std::mutex mtx;
-        std::condition_variable cv;
-        int in_flight = 0;
-        bool stopping = false;
-        std::exception_ptr first_err = nullptr;
+        // assess()'s verdict carried alongside the originating item so apply()
+        // can commit it (the finalize branch needs it.treeIdx / it.flow, the
+        // split branch needs it.treeIdx / it.box / it.depth).
+        struct Result
+        {
+            WorkItem it{};
+            Verdict v{};
+        };
 
-        auto worker = [&]() {
-            for ( ;; )
-            {
-                std::unique_lock< std::mutex > lk( mtx );
-                cv.wait( lk, [&] { return stopping || !queue.empty() || in_flight == 0; } );
-
-                if ( stopping ) return;
-                if ( queue.empty() )
-                {
-                    if ( in_flight == 0 )
-                    {
-                        cv.notify_all();
-                        return;
-                    }
-                    continue;
-                }
-
+        detail::parallelDrive(
+            num_threads_,
+            // empty(): under lock.
+            [&] { return queue.empty(); },
+            // pop(): under lock — take the front WorkItem out.
+            [&]() -> WorkItem {
                 WorkItem it = std::move( queue.front() );
                 queue.pop_front();
-                ++in_flight;
-                lk.unlock();
-
+                return it;
+            },
+            // process(): lock-free assessment (two propagations) on the item.
+            [&]( WorkItem it ) -> Result {
                 Verdict v;
                 const bool capped = it.depth >= quality_.maxDepth;
-                try
-                {
-                    if ( !capped ) v = assess( rhs, it, t0, t1 );
-                } catch ( ... )
-                {
-                    lk.lock();
-                    if ( !first_err ) first_err = std::current_exception();
-                    stopping = true;
-                    --in_flight;
-                    cv.notify_all();
-                    return;
-                }
-
-                lk.lock();
+                if ( !capped ) v = assess( rhs, it, t0, t1 );
+                return Result{ std::move( it ), std::move( v ) };
+            },
+            // apply(): under lock — fan out into children (enqueueing work) or
+            // finalize the parent. Reports whether children were enqueued.
+            [&]( Result r ) -> bool {
+                WorkItem& it = r.it;
+                Verdict& v = r.v;
                 if ( v.split )
                 {
                     // Fan the parent out into 2^k leaves by cascading k binary
@@ -257,22 +251,12 @@ class RefineDriver
                     for ( const Node& n : frontier )
                         queue.push_back( WorkItem{ std::move( v.inits[n.bits] ), n.box, child_depth,
                                                    n.idx, std::move( v.flows[n.bits] ) } );
-                } else
-                {
-                    tree.leaf( it.treeIdx ).payload = std::move( it.flow );
-                    tree.finalize( it.treeIdx );
+                    return true;
                 }
-                --in_flight;
-                cv.notify_all();
-            }
-        };
-
-        std::vector< std::thread > pool;
-        pool.reserve( static_cast< std::size_t >( num_threads_ ) );
-        for ( int i = 0; i < num_threads_; ++i ) pool.emplace_back( worker );
-        for ( auto& th : pool ) th.join();
-
-        if ( first_err ) std::rethrow_exception( first_err );
+                tree.leaf( it.treeIdx ).payload = std::move( it.flow );
+                tree.finalize( it.treeIdx );
+                return false;
+            } );
     }
 
     Quality quality_;
@@ -281,21 +265,22 @@ class RefineDriver
     int split_dirs_ = 1;
 };
 
-// Function-form entry point, mirroring tax::ads::propagate. P is the DA
-// truncation order; M (box dim) and D (state dim) are deduced. The method
-// tag selects the stepper; the quality criterion drives refinement.
+// Function-form entry point. P is the DA truncation order; M (box dim) and
+// D (state dim) are deduced. The method tag selects the stepper; the quality
+// criterion drives refinement. Returns a bare AdsTree<DAState, Box<T,M>> — unlike
+// tax::ads::propagate(), which returns AdsSolution<Stepper, M>.
 template < int P, class Method, class Quality, class F, class T, int M, int D >
-[[nodiscard]] auto refine( Method, Quality quality, F&& rhs, const Box< T, M >& ic_box,
+[[nodiscard]] auto refine( Method, Quality quality, F&& rhs, const tax::domain::Box< T, M >& ic_box,
                            const Eigen::Matrix< T, D, 1 >& ic_center, const T& t0, const T& t1,
                            tax::ode::IntegratorConfig< T > cfg = {}, int num_threads = 1,
                            int split_dirs = 1 )
 {
     using TE = tax::TaylorExpansion< T, tax::IsotropicScheme< P, M >, tax::storage::Dense >;
     using DAState = Eigen::Matrix< TE, D, 1 >;
-    using Stepper = tax::ode::detail::StepperT< Method, DAState >;
+    using Stepper = tax::ode::StepperType< Method, DAState >;
 
-    RefineDriver< Stepper, Quality > driver{ std::move( quality ), std::move( cfg ), num_threads,
-                                             split_dirs };
+    AdsRefineDriver< Stepper, Quality > driver{ std::move( quality ), std::move( cfg ), num_threads,
+                                                split_dirs };
     return driver.run( std::forward< F >( rhs ), ic_box, ic_center, t0, t1 );
 }
 

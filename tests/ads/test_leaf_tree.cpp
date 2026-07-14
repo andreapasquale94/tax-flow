@@ -1,21 +1,21 @@
 // tests/ads/test_leaf_tree.cpp
 //
-// AdsTree<Payload, M, T> — arena layout, BFS work queue, sibling links,
+// AdsTree<Payload, Domain> — arena layout, BFS work queue, sibling links,
 // point-lookup linear scan, sibling merge.
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/box.hpp>
 #include <tax/ads/leaf.hpp>
 #include <tax/ads/tree.hpp>
+#include <tax/domain/box.hpp>
 
 using tax::ads::AdsTree;
-using tax::ads::Box;
 using tax::ads::Leaf;
+using tax::domain::Box;
 
 namespace
 {
-using Tree = AdsTree< int, 2, double >;  // Payload = int (cheap to copy)
+using Tree = AdsTree< int, tax::domain::Box< double, 2 > >;  // Payload = int (cheap to copy)
 using BoxT = Box< double, 2 >;
 using V2 = tax::la::VecNT< 2, double >;
 
@@ -79,6 +79,37 @@ TEST( AdsTree, SplitRetiresParentAndAppendsChildren )
     EXPECT_EQ( tree.popFront(), R );
 }
 
+// Regression (A4): splitDone bisects a leaf into two children that are DONE
+// immediately — used when the split criterion fires at t1. The parent retires,
+// both children are done (in the done list), never active or queued.
+TEST( AdsTree, SplitDoneFinalizesBothChildren )
+{
+    Tree tree;
+    const int root = tree.init( unitBox(), 7 );
+    (void)tree.popFront();
+
+    auto pr = tree.splitDone( root, /*dim=*/1, /*leftPayload=*/10, /*rightPayload=*/20,
+                              /*tEntry=*/1.0 );
+    const int L = pr.first;
+    const int R = pr.second;
+
+    EXPECT_TRUE( tree.leaf( root ).retired );
+    EXPECT_FALSE( tree.leaf( root ).done );
+    EXPECT_TRUE( tree.leaf( L ).done );
+    EXPECT_TRUE( tree.leaf( R ).done );
+    EXPECT_EQ( tree.leaf( L ).siblingIdx, R );
+    EXPECT_EQ( tree.leaf( R ).siblingIdx, L );
+    EXPECT_EQ( tree.leaf( L ).splitDim, 1 );
+    // No new active leaves, no new work: the children are terminal.
+    EXPECT_EQ( tree.active().size(), 0u );
+    EXPECT_EQ( tree.done().size(), 2u );
+    EXPECT_TRUE( tree.empty() );
+
+    // The two child domains tile the parent along dim 1.
+    EXPECT_DOUBLE_EQ( tree.leaf( L ).domain.halfWidth( 1 ), 0.5 );
+    EXPECT_DOUBLE_EQ( tree.leaf( R ).domain.halfWidth( 1 ), 0.5 );
+}
+
 TEST( AdsTree, FinalizeMovesToDoneList )
 {
     Tree tree;
@@ -101,8 +132,8 @@ TEST( AdsTree, LeafLookupSkipsRetired )
     const int L = pr.first;
     const int R = pr.second;
 
-    auto fl = tree.leaf( V2{ -0.5, 0.0 } );
-    auto fr = tree.leaf( V2{ 0.5, 0.0 } );
+    auto fl = tree.locate( V2{ -0.5, 0.0 } );
+    auto fr = tree.locate( V2{ 0.5, 0.0 } );
     ASSERT_TRUE( fl.has_value() );
     ASSERT_TRUE( fr.has_value() );
     EXPECT_EQ( *fl, L );
@@ -113,7 +144,7 @@ TEST( AdsTree, LeafLookupNoneOutside )
 {
     Tree tree;
     (void)tree.init( unitBox(), 7 );
-    auto miss = tree.leaf( V2{ 2.0, 0.0 } );
+    auto miss = tree.locate( V2{ 2.0, 0.0 } );
     EXPECT_FALSE( miss.has_value() );
 }
 
@@ -144,9 +175,9 @@ TEST( AdsTree, MergeRevivesParent )
 TEST( AdsTree, CanonicalizeDoneSortsByBoxCenter )
 {
     // M=1 tree of doubles. Root box center 0, halfWidth 1.
-    tax::ads::AdsTree< double, 1, double > tree;
-    tax::ads::Box< double, 1 > root{ tax::la::VecNT< 1, double >{ 0.0 },
-                                     tax::la::VecNT< 1, double >{ 1.0 } };
+    tax::ads::AdsTree< double, tax::domain::Box< double, 1 > > tree;
+    tax::domain::Box< double, 1 > root{ tax::la::VecNT< 1, double >{ 0.0 },
+                                        tax::la::VecNT< 1, double >{ 1.0 } };
     const int r = tree.init( root, 0.0 );
 
     // Split root on dim 0 -> children centered at -0.5 and +0.5.
@@ -159,13 +190,13 @@ TEST( AdsTree, CanonicalizeDoneSortsByBoxCenter )
     auto before = tree.done();
     ASSERT_EQ( before.size(), 2u );
     // Insertion order: right (+0.5) then left (-0.5).
-    EXPECT_GT( tree.leaf( before[0] ).box.center( 0 ), 0.0 );
+    EXPECT_GT( tree.leaf( before[0] ).domain.center( 0 ), 0.0 );
 
     tree.canonicalizeDone();
 
     auto after = tree.done();
     ASSERT_EQ( after.size(), 2u );
     // Canonical order: ascending center, so left (-0.5) first.
-    EXPECT_LT( tree.leaf( after[0] ).box.center( 0 ), 0.0 );
-    EXPECT_GT( tree.leaf( after[1] ).box.center( 0 ), 0.0 );
+    EXPECT_LT( tree.leaf( after[0] ).domain.center( 0 ), 0.0 );
+    EXPECT_GT( tree.leaf( after[1] ).domain.center( 0 ), 0.0 );
 }

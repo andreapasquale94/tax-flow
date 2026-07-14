@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include <tax/ads/criteria.hpp>
+#include <tax/ads/split_criteria.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 

@@ -26,7 +26,7 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <tax/ads/box.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
@@ -119,9 +119,9 @@ inline const tax::la::VecNT< 4, double > kIcBoxHalfWidth{
     0.005 / kVelU_kms   // vy  : 1 m/s
 };
 
-inline tax::ads::Box< double, 4 > icBox()
+inline tax::domain::Box< double, 4 > icBox()
 {
-    return tax::ads::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
+    return tax::domain::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
 }
 
 // ---- Boundary helpers ------------------------------------------------------

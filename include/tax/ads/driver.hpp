@@ -10,20 +10,18 @@
 
 #pragma once
 
-#include <condition_variable>
-#include <exception>
 #include <memory>
-#include <mutex>
-#include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/ads/detail/work_pool.hpp>
 #include <tax/ads/solution.hpp>
 #include <tax/ads/split_event.hpp>
 #include <tax/ads/tree.hpp>
 #include <tax/core/taylor_expansion.hpp>
+#include <tax/domain/box.hpp>
+#include <tax/domain/create.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode/event.hpp>
 #include <tax/ode/integrator.hpp>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -31,7 +29,10 @@
 namespace tax::ads
 {
 
-template < class Stepper, class Criterion >
+// Domain defaults to void → resolved below to tax::domain::Box<T,M> (T,M
+// derive from Stepper and can't be named in the template default). Pass e.g.
+// tax::domain::Zonotope<T,M> for oriented leaves.
+template < class Stepper, class Criterion, class Domain = void >
 class AdsDriver
 {
    public:
@@ -45,8 +46,9 @@ class AdsDriver
     static constexpr int M = TE::vars_v;
     static constexpr int D = State::RowsAtCompileTime;
 
-    using Tree = AdsTree< State, M, T >;
-    using BoxT = Box< T, M >;
+    using DomainT =
+        std::conditional_t< std::is_void_v< Domain >, tax::domain::Box< T, M >, Domain >;
+    using Tree = AdsTree< State, DomainT >;
     using LeafSol = tax::ode::Solution< Stepper, State >;
 
     // The driver uses Stepper::T as the (real) time/scalar type. Embedded-RK
@@ -66,13 +68,16 @@ class AdsDriver
     }
 
     template < class F >
-    [[nodiscard]] AdsSolution< Stepper, M > run( F&& rhs, const BoxT& ic_box,
-                                                 const Eigen::Matrix< T, D, 1 >& ic_center, T t0,
-                                                 T t1 )
+    [[nodiscard]] AdsSolution< Stepper, DomainT > run( F&& rhs, const DomainT& ic_domain,
+                                                       const Eigen::Matrix< T, D, 1 >& ic_center,
+                                                       T t0, T t1 )
     {
         Tree tree;
-        State root_state = tax::ads::create< N, M >( ic_box, ic_center );
-        (void)tree.init( ic_box, std::move( root_state ), t0 );
+        // Unqualified: ADL finds the create() overload in the domain's own
+        // namespace (tax::domain for the built-ins, or a user namespace for a
+        // custom Domain), including overloads declared after this header.
+        State root_state = create< N, M >( ic_domain, ic_center );
+        (void)tree.init( ic_domain, std::move( root_state ), t0 );
 
         std::vector< LeafSol > leafSol;
         if ( num_threads_ > 1 )
@@ -81,7 +86,7 @@ class AdsDriver
             driveSerial( rhs, tree, leafSol, t1 );
 
         tree.canonicalizeDone();
-        return AdsSolution< Stepper, M >{ std::move( tree ), std::move( leafSol ), t0, t1 };
+        return AdsSolution< Stepper, DomainT >{ std::move( tree ), std::move( leafSol ), t0, t1 };
     }
 
    protected:
@@ -89,7 +94,8 @@ class AdsDriver
     // finalize with a flow-map payload. Computed lock-free in stepLeaf.
     struct LeafVerdict
     {
-        bool split = false;
+        bool split = false;       // split into two children, re-propagate them
+        bool splitFinal = false;  // split at t1: finalize both children directly
         int dim = -1;
         T splitTime{};
         State left{};
@@ -102,7 +108,7 @@ class AdsDriver
     // crit_, cfg_, extras_ (all const) and the passed-in rhs / inputs.
     template < class F >
     [[nodiscard]] LeafVerdict stepLeaf( const F& rhs, const State& payload, T tEntry, int depth,
-                                        const BoxT& box, T t1 ) const
+                                        T t1 ) const
     {
         SplitRequest< T > req;
         tax::ode::Integrator< Stepper, std::decay_t< F > > integ{ rhs, cfg_ };
@@ -112,23 +118,23 @@ class AdsDriver
             std::make_shared< SplitEvent< State, T, Criterion > >( crit_, depth, &req ) );
         auto sol = integ.integrate( payload, tEntry, t1 );
 
-        // Guard against a split fired at (or beyond) the final time —
-        // splitting would queue two children with tEntry == t1, and the
-        // integrator rejects empty intervals.
+        // A split fired at (or beyond) the final time cannot re-propagate its
+        // children (tEntry == t1 is an empty interval the integrator rejects).
+        // But the parent's flow map at t1 IS complete, so we split it and mark
+        // both children done directly rather than discarding the split and
+        // leaving an over-tolerance leaf in the final partition.
         const bool atFinal = req.fired && !( req.t < t1 );
 
         LeafVerdict v;
-        if ( req.fired && !atFinal )
+        if ( req.fired )
         {
-            v.split = true;
             v.dim = req.dim;
             v.splitTime = req.t;
-            auto pr = tax::ads::split( sol.x.back(), box, req.dim );
+            auto pr = tax::ads::split( sol.x.back(), req.dim );
             v.left = std::move( pr.first );
             v.right = std::move( pr.second );
-        } else
-        {
-            v.split = false;
+            v.split = !atFinal;
+            v.splitFinal = atFinal;
         }
         v.leafSol = std::move( sol );  // capture events + steps (read sol.x.back() above first)
         return v;
@@ -142,7 +148,7 @@ class AdsDriver
             const int idx = tree.popFront();
             const auto& l = tree.leaf( idx );
 
-            LeafVerdict v = stepLeaf( rhs, l.payload, l.tEntry, l.depth, l.box, t1 );
+            LeafVerdict v = stepLeaf( rhs, l.payload, l.tEntry, l.depth, t1 );
 
             if ( static_cast< int >( leafSol.size() ) <= idx )
                 leafSol.resize( static_cast< std::size_t >( idx ) + 1 );
@@ -151,6 +157,15 @@ class AdsDriver
             {
                 (void)tree.split( idx, v.dim, std::move( v.left ), std::move( v.right ),
                                   v.splitTime );
+            } else if ( v.splitFinal )
+            {
+                const auto [c1, c2] =
+                    tree.splitDone( idx, v.dim, std::move( v.left ), std::move( v.right ), t1 );
+                // Keep leafSol parallel to the arena: the two terminal children
+                // were never integrated, so they carry empty ode::Solutions.
+                if ( static_cast< int >( leafSol.size() ) <= c2 )
+                    leafSol.resize( static_cast< std::size_t >( c2 ) + 1 );
+                (void)c1;
             } else
             {
                 tree.leaf( idx ).payload = v.leafSol.x.back();
@@ -160,103 +175,82 @@ class AdsDriver
         }
     }
 
-    // Parallel scheduler: num_threads_ jthread workers pull ready leaves
-    // from the tree's work queue. The expensive integration (stepLeaf)
-    // runs lock-free on copied-out inputs; the mutex guards only the
-    // cheap queue access and tree mutation plus the in_flight counter.
-    // Termination: queue empty AND no task in flight. Worker exceptions
-    // are captured (first wins) and rethrown on the calling thread.
+    // Parallel scheduler: num_threads_ workers pull ready leaves from the
+    // tree's work queue (which IS the AdsTree). The expensive integration
+    // (stepLeaf) runs lock-free on copied-out inputs; the shared work-pool
+    // (detail::parallelDrive) guards only the cheap queue access and tree
+    // mutation plus the in_flight counter. Termination, exception capture,
+    // and the notify policy are owned by the pool.
     template < class F >
     void driveParallel( const F& rhs, Tree& tree, std::vector< LeafSol >& leafSol, T t1 )
     {
-        std::mutex mtx;
-        std::condition_variable cv;
-        int in_flight = 0;
-        bool stopping = false;
-        std::exception_ptr first_err = nullptr;
+        // One leaf taken out of the tree for lock-free integration. tree.split
+        // appends to the arena vector and may reallocate, so we copy/move the
+        // inputs out rather than hold references across the lock-free work:
+        // indices stay valid across reallocation; references do not.
+        struct Item
+        {
+            int idx = -1;
+            State payload{};
+            T tEntry{};
+            int depth = 0;
+        };
+        // stepLeaf's verdict, tagged with the originating leaf index so apply()
+        // can commit it without the item.
+        struct Result
+        {
+            int idx = -1;
+            LeafVerdict v{};
+        };
 
-        auto worker = [&]() {
-            for ( ;; )
-            {
-                std::unique_lock< std::mutex > lk( mtx );
-                cv.wait( lk, [&] { return stopping || !tree.empty() || in_flight == 0; } );
-
-                if ( stopping ) return;
-                if ( tree.empty() )
-                {
-                    if ( in_flight == 0 )
-                    {
-                        cv.notify_all();  // wake the others to terminate
-                        return;
-                    }
-                    continue;  // tasks still running may yet enqueue work
-                }
-
+        detail::parallelDrive(
+            num_threads_,
+            // empty(): under lock.
+            [&] { return tree.empty(); },
+            // pop(): under lock — take the front leaf's inputs out.
+            [&]() -> Item {
                 const int idx = tree.popFront();
-                // Take inputs out: tree.split appends to the arena vector
-                // and may reallocate, so we must not hold references to
-                // leaf storage across the lock-free integration. Indices
-                // stay valid across reallocation; references do not. The
-                // payload can be moved — the leaf is subsequently either
-                // retired (split) or overwritten (finalize).
-                State payload = std::move( tree.leaf( idx ).payload );
-                const T tEntry = tree.leaf( idx ).tEntry;
-                const int depth = tree.leaf( idx ).depth;
-                const BoxT box = tree.leaf( idx ).box;
-                ++in_flight;
-                lk.unlock();
-
-                LeafVerdict v;
-                try
-                {
-                    v = stepLeaf( rhs, payload, tEntry, depth, box, t1 );
-                } catch ( ... )
-                {
-                    lk.lock();
-                    if ( !first_err ) first_err = std::current_exception();
-                    stopping = true;
-                    --in_flight;
-                    cv.notify_all();
-                    return;
-                }
-
-                lk.lock();
+                Item it;
+                it.idx = idx;
+                it.payload = std::move( tree.leaf( idx ).payload );
+                it.tEntry = tree.leaf( idx ).tEntry;
+                it.depth = tree.leaf( idx ).depth;
+                return it;
+            },
+            // process(): lock-free integration on the copied-out item.
+            [&]( Item it ) -> Result {
+                return Result{ it.idx, stepLeaf( rhs, it.payload, it.tEntry, it.depth, t1 ) };
+            },
+            // apply(): under lock — split or finalize, capture the per-leaf
+            // Solution, and report whether work was enqueued (split → 2 leaves).
+            [&]( Result r ) -> bool {
+                const int idx = r.idx;
+                LeafVerdict& v = r.v;
                 if ( static_cast< int >( leafSol.size() ) <= idx )
                     leafSol.resize( static_cast< std::size_t >( idx ) + 1 );
-                bool do_notify;
+                bool produced;
                 if ( v.split )
                 {
                     (void)tree.split( idx, v.dim, std::move( v.left ), std::move( v.right ),
                                       v.splitTime );
-                    --in_flight;
-                    do_notify = true;  // two new leaves are now available to claim
+                    produced = true;  // two new leaves are now available to claim
+                } else if ( v.splitFinal )
+                {
+                    const auto [c1, c2] =
+                        tree.splitDone( idx, v.dim, std::move( v.left ), std::move( v.right ), t1 );
+                    if ( static_cast< int >( leafSol.size() ) <= c2 )
+                        leafSol.resize( static_cast< std::size_t >( c2 ) + 1 );
+                    (void)c1;
+                    produced = false;  // terminal children — nothing to claim
                 } else
                 {
                     tree.leaf( idx ).payload = v.leafSol.x.back();
                     tree.finalize( idx );
-                    --in_flight;
-                    // Finalize adds no work, so only wake the pool when this was the
-                    // last in-flight task and the queue is drained — the others then
-                    // observe quiescence and terminate. Otherwise a notify here would
-                    // just wake idle workers that immediately re-block (thundering herd).
-                    do_notify = ( in_flight == 0 && tree.empty() );
+                    produced = false;
                 }
                 leafSol[static_cast< std::size_t >( idx )] = std::move( v.leafSol );
-                lk.unlock();
-                // Notify outside the lock so woken workers don't immediately contend
-                // on the mutex we still hold.
-                if ( do_notify ) cv.notify_all();
-            }
-        };
-
-        {
-            std::vector< std::thread > pool;
-            pool.reserve( static_cast< std::size_t >( num_threads_ ) );
-            for ( int i = 0; i < num_threads_; ++i ) pool.emplace_back( worker );
-            for ( auto& t : pool ) t.join();
-        }
-
-        if ( first_err ) std::rethrow_exception( first_err );
+                return produced;
+            } );
     }
 
     Criterion crit_;

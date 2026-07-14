@@ -11,12 +11,17 @@ truncated-Taylor core. It provides:
 
 - **`tax::ode`** — adaptive Runge–Kutta and Taylor-method ODE integration with an
   event system (triggers/actions), dense output, and step-size controllers.
+- **`tax::domain`** — set-valued IC domains (`Box`, `Zonotope`,
+  `PolynomialZonotope`), the DA-state bridge (`create`) and the
+  enclosure/query layer (interval hulls, zonotope enclosures, point location)
 - **`tax::ads`** — Automatic Domain Splitting (Wittig 2015) and the LOADS variant
   (Losacco/Fossà/Armellin 2024), composed on top of the `tax::ode` event
   infrastructure.
 
-The header include paths (`<tax/ode.hpp>`, `<tax/ads.hpp>`) and namespaces
-(`tax::ode`, `tax::ads`) are unchanged from when these modules lived in `tax`.
+The `<tax/ode.hpp>` / `<tax/ads.hpp>` include paths and `tax::ode` /
+`tax::ads` namespaces are unchanged from when these modules lived in `tax`;
+`<tax/domain.hpp>` (`tax::domain`) was split out of `tax::ads` when the
+domain interface became module-sized.
 
 ## Requirements
 
@@ -73,10 +78,14 @@ auto sol = tax::ode::propagate(Verner89{}, rhs, x0, 0.0, 2 * M_PI);
 #include <tax/ode.hpp>
 using namespace tax::ode::methods;
 
-tax::ads::Box<double, 2> ic_box{center_vec, half_width_vec};
-auto tree = tax::ads::propagate</*P=*/6>(
+// Box is the default domain; Zonotope and PolynomialZonotope are also supported.
+tax::domain::Box<double, 2> ic_box{center_vec, half_width_vec};
+auto sol = tax::ads::propagate</*P=*/6>(
     Verner89{}, tax::ads::TruncationCriterion{1e-4, 8},
     rhs, ic_box, ic_center, 0.0, 2 * M_PI, cfg);
+
+const auto& tree = sol.tree();   // AdsSolution wraps the AdsTree + per-leaf ODE Solutions
+auto x_of_ic = sol.evaluate(ic); // piecewise-polynomial flow map at a sampled IC
 ```
 
 ## License

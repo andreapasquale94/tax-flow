@@ -102,6 +102,10 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
 {
     if ( !( tmax > t0 ) ) throw std::invalid_argument( "Integrator::integrate: tmax must be > t0" );
 
+    // Clear any per-integration state in the events so this Integrator can be
+    // reused for a second integrate() call (e.g. a GridEvent's cursor).
+    for ( const auto& e : events_ ) e->reset();
+
     Solution sol;
     sol.t.push_back( t0 );
     sol.x.push_back( x0 );
@@ -135,34 +139,55 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
                         ? cfg_.min_step
                         : std::numeric_limits< T >::epsilon() * std::abs( span ) * T{ 16 };
 
+    // "Close enough to tmax to stop" tolerance — an eps-scaled float remainder,
+    // NOT h_min. A user-set min_step is an adaptive floor, not a reason to stop
+    // a fraction of min_step short of tmax (which would silently truncate the
+    // integration and skip trailing event stops).
+    const T remainder_tol = std::numeric_limits< T >::epsilon() * std::abs( span ) * T{ 16 };
+
     Recorder< State, T > rec{ &sol.events };
+
+    // Max step allowed from the current time: never advance past tmax or any
+    // event's nextStop. Recomputed after a rejection (t is unchanged, but the
+    // reject branch must re-apply the SAME event cap, not just the tmax one).
+    auto step_cap = [&]( T tcur ) -> T {
+        T cap = tmax - tcur;
+        for ( const auto& e : events_ )
+            if ( auto ns = e->nextStop( tcur ) )
+            {
+                const T d = *ns - tcur;
+                if ( d > T{ 0 } && d < cap ) cap = d;
+            }
+        return cap;
+    };
 
     int total_steps = 0;
     bool terminate = false;
 
     while ( t < tmax && !terminate )
     {
-        // Floating-point accumulation in t can leave a sub-h_min remainder
-        // to tmax. Treat that as "we are at tmax" and stop, rather than
-        // throwing on the inevitable final-step underflow.
-        if ( tmax - t < h_min ) break;
+        // Floating-point accumulation in t can leave a sub-eps remainder to
+        // tmax. Treat that as "we are at tmax" and stop, rather than throwing on
+        // the inevitable final-step underflow.
+        if ( tmax - t < remainder_tol ) break;
 
         if ( ++total_steps > cfg_.max_steps )
             throw std::runtime_error( "Integrator::integrate: max_steps exceeded" );
 
-        // Pre-step clamp: never advance past tmax or any event's nextStop.
-        {
-            T cap = tmax - t;
-            for ( const auto& e : events_ )
-                if ( auto ns = e->nextStop( t ) )
-                    if ( *ns - t < cap ) cap = *ns - t;
-            if ( cap < h ) h = cap;
-        }
+        // Pre-step clamp to the nearest hard stop (tmax or an event).
+        const T cap = step_cap( t );
+        if ( cap < h ) h = cap;
+
+        // A stop closer than h_min is a legitimate forced landing (e.g. an
+        // event grid finer than a user-set min_step); take a step of that size
+        // rather than throwing "step size below min_step". The underflow guard
+        // then applies only to controller-driven shrinking, not forced stops.
+        const bool forced_landing = cap <= h_min;
 
         int rejects = 0;
         while ( true )
         {
-            if ( h < h_min )
+            if ( !forced_landing && h < h_min )
                 throw std::runtime_error( "Integrator::integrate: step size below min_step" );
 
             auto r = stepper.step( f_, x, t, h, cfg_ );
@@ -172,11 +197,11 @@ typename Integrator< Stepper, F >::Solution Integrator< Stepper, F >::integrate(
                 if ( !r.accepted )
                 {
                     h = std::max( r.h_next, h_min );
-                    // Re-apply the span / max_step clamps on retry: otherwise a
-                    // rejection near the end of the interval can retry with an
-                    // unclamped step and overshoot tmax.
+                    // Re-apply the full clamp on retry (max_step + the tmax/event
+                    // cap): otherwise a rejection can retry with a step that
+                    // overshoots tmax OR a pending event stop and drops it.
                     if ( cfg_.max_step > T{ 0 } ) h = std::min( h, cfg_.max_step );
-                    h = std::min( h, tmax - t );
+                    h = std::min( h, step_cap( t ) );
                     if ( ++rejects > cfg_.max_rejects_per_step )
                         throw std::runtime_error( "Integrator::integrate: rejection cap reached" );
                     continue;

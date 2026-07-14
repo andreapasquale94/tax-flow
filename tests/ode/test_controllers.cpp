@@ -50,6 +50,23 @@ TEST( OdeControllerPI, RemembersPreviousError )
     EXPECT_NE( h2, i_only );
 }
 
+// Regression (O4): PI must never grow the step on a REJECTED step (err > tol).
+// After a big rejection the proportional term would otherwise push the retry
+// step above the one that just failed. The proposed step must not exceed h_used
+// whenever the current error exceeds tol.
+TEST( OdeControllerPI, NeverGrowsOnRejectedStep )
+{
+    PI< double > c;
+    const double tol = 1.0;
+    // First (rejected) step with a huge error primes err_prev_ large.
+    c.next_step( /*h_used=*/0.1, /*err=*/100.0, tol, /*p_emb=*/4 );
+    // Second (still rejected) step with only slightly-too-large error: the
+    // proportional term wants to grow, but a rejected step must not.
+    const double h_used = 0.0358;
+    const double h_new = c.next_step( h_used, /*err=*/1.2, tol, /*p_emb=*/4 );
+    EXPECT_LE( h_new, h_used );
+}
+
 TEST( OdeControllerH211b, FirstCallBehavesLikeI )
 {
     H211b< double > c;

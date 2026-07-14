@@ -29,7 +29,7 @@
 
 #include <array>
 #include <cmath>
-#include <tax/ads/box.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 
@@ -133,9 +133,9 @@ inline tax::la::VecNT< 6, double > ballisticCenter()
 // ---- Control box (M = 2) ----------------------------------------------------
 // axis 0: m     in [0, a_max]   (center a_max/2, half-width a_max/2)
 // axis 1: theta in [0, 2*pi]    (center pi,      half-width pi)
-inline tax::ads::Box< double, 2 > controlBox( double a_max )
+inline tax::domain::Box< double, 2 > controlBox( double a_max )
 {
-    return tax::ads::Box< double, 2 >{ { a_max / 2.0, M_PI }, { a_max / 2.0, M_PI } };
+    return tax::domain::Box< double, 2 >{ { a_max / 2.0, M_PI }, { a_max / 2.0, M_PI } };
 }
 
 // ---- Boundary coordinates -> normalized M=2 control point -------------------

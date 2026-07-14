@@ -35,8 +35,8 @@ namespace
 // the radial spoke that a full control-box-perimeter trace would draw (the
 // m = 0 edge collapses to a point and the theta seam doubles back).
 template < class Partition >
-example::Polygon envelopePolygon( const Partition& part, const tax::ads::Box< double, 2 >& full_box,
-                                  int n_theta )
+example::Polygon envelopePolygon( const Partition& part,
+                                  const tax::domain::Box< double, 2 >& full_box, int n_theta )
 {
     example::Polygon p;
     p.x.reserve( static_cast< std::size_t >( n_theta ) + 1 );
@@ -47,20 +47,12 @@ example::Polygon envelopePolygon( const Partition& part, const tax::ads::Box< do
         const double xitheta =
             -1.0 + 2.0 * static_cast< double >( i ) / static_cast< double >( n_theta );
         const double th = full_box.center( 1 ) + full_box.halfWidth( 1 ) * xitheta;
-        for ( const auto& leaf : part )
-        {
-            const double dm = m - leaf.box.center( 0 );
-            const double dt = th - leaf.box.center( 1 );
-            if ( std::abs( dm ) <= leaf.box.halfWidth( 0 ) + 1e-9 &&
-                 std::abs( dt ) <= leaf.box.halfWidth( 1 ) + 1e-9 )
-            {
-                const std::array< double, 2 > loc{ dm / leaf.box.halfWidth( 0 ),
-                                                   dt / leaf.box.halfWidth( 1 ) };
-                p.x.push_back( leaf.flowMap( 2 ).eval( loc ) );
-                p.y.push_back( leaf.flowMap( 3 ).eval( loc ) );
-                break;
-            }
-        }
+        // Partition::evaluate locates the owning leaf, recovers its exact
+        // factor coordinates and evaluates the flow map in one call.
+        const auto state = part.evaluate( tax::la::VecNT< 2, double >{ m, th } );
+        if ( !state.has_value() ) continue;
+        p.x.push_back( ( *state )( 2 ) );
+        p.y.push_back( ( *state )( 3 ) );
     }
     return p;
 }

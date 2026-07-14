@@ -43,7 +43,7 @@ int main()
     cfg.save_steps = true;
 
     // ---- One DA propagation over the whole interval -------------------------
-    auto x0_da = tax::ads::create< P, M >( ic_box, icCenter() );
+    auto x0_da = tax::domain::create< P, M >( ic_box, icCenter() );
     Stopwatch clock;
     auto sol = tax::ode::propagate( Verner89{}, rhs(), x0_da, 0.0, t_final, cfg );
     const double elapsed_ms = clock.ms();

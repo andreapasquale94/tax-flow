@@ -128,11 +128,18 @@ runs. This is checked directly in `tests/ads/test_refine.cpp`.
 
 ## Choosing between methods
 
-| Use… | when |
-|---|---|
-| `propagate` (classic) | you want the cheapest partition; in-flight splitting is fine |
-| `refine` + `CoefficientMatch` | you want a final-time accuracy guarantee, dimension-free, and full-recursion parallelism |
-| `refine` + `VolumeRatio` | you specifically want to bound the growth of the reachable *set* (uncertainty / reachability) |
+| Use… | returns | when |
+|---|---|---|
+| `propagate` (classic) | `AdsSolution<Stepper, M>` (tree + per-leaf ODE Solutions) | you want the cheapest partition; in-flight splitting is fine |
+| `refine` + `CoefficientMatch` | bare `AdsTree` (flow maps only, no per-leaf Solutions) | you want a final-time accuracy guarantee, dimension-free, and full-recursion parallelism |
+| `refine` + `VolumeRatio` | bare `AdsTree` (flow maps only, no per-leaf Solutions) | you specifically want to bound the growth of the reachable *set* (uncertainty / reachability) |
+
+!!! note "Return-type difference"
+    `tax::ads::propagate()` returns `AdsSolution<Stepper, M>`, which wraps the
+    `AdsTree` together with per-leaf `Solution` objects (full step grids, events).
+    `tax::ads::refine()` returns a bare `AdsTree` by design — the
+    propagate-then-assess pattern does not keep intermediate ODE Solutions, so
+    no `AdsSolution` wrapper is produced.
 
 ---
 

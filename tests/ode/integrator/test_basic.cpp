@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 
@@ -30,6 +32,29 @@ TEST( OdeIntegrator, ExpEndpointAccurate )
     EXPECT_GE( sol.size(), 2u );
     EXPECT_DOUBLE_EQ( sol.t.back(), 1.0 );
     EXPECT_NEAR( sol.x.back()( 0 ), std::exp( 1.0 ), 1e-11 );
+}
+
+// Regression (O5): a NaN-producing RHS must make the adaptive stepper REJECT
+// and back off (eventually throwing), never misread the non-finite error as
+// zero and grow the step by max_factor to hop over the singularity.
+TEST( OdeIntegrator, NanRhsRejectsRatherThanGrowing )
+{
+    using State = tax::la::VecNT< 1, double >;
+
+    IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-10;
+
+    // Blows up to NaN once t passes 0.5.
+    const auto f = []( const auto& x, const auto& t ) {
+        State d;
+        d( 0 ) = ( t > 0.5 ) ? std::numeric_limits< double >::quiet_NaN() : x( 0 );
+        return d;
+    };
+    tax::ode::Verner89< State, tax::ode::controllers::PI< double >, decltype( f ) > integ{ f, cfg };
+
+    State x0;
+    x0( 0 ) = 1.0;
+    EXPECT_THROW( (void)integ.integrate( x0, 0.0, 1.0 ), std::runtime_error );
 }
 
 TEST( OdeIntegrator, HarmonicQuarterPeriod )

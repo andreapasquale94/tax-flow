@@ -4,16 +4,21 @@
 
 **tax-flow** is the higher-level numerics layer built on top of
 [`tax`](https://github.com/andreapasquale94/tax), the header-only C++23
-Truncated Algebraic eXpansions (TAX) core. It ships two header-only modules:
+Truncated Algebraic eXpansions (TAX) core. It ships three header-only modules:
 
 - **`tax::ode`** — adaptive ODE integration (Runge–Kutta + Taylor methods) with
   an event system, dense output, and step-size controllers.
+- **`tax::domain`** — set-valued IC domains (`Box`, `Zonotope`,
+  `PolynomialZonotope`), the `Domain`/`LocatableDomain` concept tiers, the
+  DA-state bridge (`create`) and the enclosure/query layer (interval hulls,
+  zonotope enclosures, ellipsoid coverings, factor recovery, reorientation).
 - **`tax::ads`** — Automatic Domain Splitting (Wittig 2015) and the LOADS
-  variant (Losacco/Fossà/Armellin 2024), composed on the `tax::ode` events.
+  variant (Losacco/Fossà/Armellin 2024), composed on the `tax::ode` events and
+  generic over any `tax::domain` primitive.
 
-Both keep the original `<tax/ode.hpp>` / `<tax/ads.hpp>` include paths and
-`tax::ode` / `tax::ads` namespaces — they were split out of the `tax` repository
-unchanged. `ads` depends on `ode`; both depend on the `tax` core.
+`<tax/ode.hpp>` / `<tax/ads.hpp>` keep the include paths and namespaces they
+had inside the `tax` repository; `<tax/domain.hpp>` was later split out of
+`tax::ads`. `ads` depends on `ode` and `domain`; all depend on the `tax` core.
 
 - **Version:** 0.1.0
 - **License:** BSD 3-Clause
@@ -46,6 +51,7 @@ change needs the core (e.g. a new kernel or operator), make it in `tax` first.
 tax-flow/
 ├── include/tax/
 │   ├── ode.hpp               # Facade: ODE integration module (tax::ode)
+│   ├── domain.hpp            # Facade: set-valued domains (tax::domain)
 │   ├── ads.hpp               # Facade: Automatic Domain Splitting (tax::ads)
 │   ├── ode/                  # Adaptive ODE integration (namespace tax::ode)
 │   │   ├── propagate.hpp     #   propagate(method, rhs, x0, t0, t1, cfg, events)
@@ -58,20 +64,32 @@ tax-flow/
 │   │   ├── event.hpp / triggers.hpp / actions.hpp
 │   │   ├── vector_ops.hpp    #   VectorOps<S> trait (scalar / TE / Eigen states)
 │   │   └── named.hpp         #   VectorOps for tax::named expansions as ODE state
+│   ├── domain/               # Set-valued domains (namespace tax::domain)
+│   │   ├── domain.hpp        #   Domain+LocatableDomain concepts, domain_traits
+│   │   ├── box.hpp           #   Box<T,M> (default domain)
+│   │   ├── zonotope.hpp      #   Zonotope<T,M> (oriented parallelotope)
+│   │   ├── polynomial_zonotope.hpp  # PolynomialZonotope<T,N,M> (+ its create)
+│   │   ├── create.hpp        #   create(domain, x0) → identity DA state
+│   │   ├── enclosure.hpp     #   intervalHull, zonotopeEnclosure, zonotopeFrame
+│   │   ├── ellipsoid.hpp     #   ellipsoidCover, ellipsoidIntervalHull
+│   │   ├── reorient.hpp      #   reorientState/Zonotope, flowAlignedRotation
+│   │   └── detail/           #   substitute_axis (split/merge substitution)
 │   └── ads/                  # Automatic Domain Splitting (namespace tax::ads)
-│       ├── box.hpp, leaf.hpp, tree.hpp
-│       ├── criteria.hpp      #   SplitCriterion, TruncationCriterion, NliCriterion
-│       ├── nonlinearity_index.hpp, split_event.hpp, da_state.hpp
-│       ├── driver.hpp, propagate.hpp, merge.hpp
+│       ├── detail/           #   internal helpers (nonlinearity_index, work_pool)
+│       ├── leaf.hpp, tree.hpp
+│       ├── split_criteria.hpp #   SplitCriterion, TruncationCriterion, NliCriterion
+│       ├── split_event.hpp, da_state.hpp
+│       ├── driver.hpp, propagate.hpp, merge.hpp, solution.hpp
 │       └── refine.hpp, refine_criteria.hpp
 ├── tests/                    # Google Test suite
 │   ├── ode/                  #   steppers/, integrator/, events/, problems/ (CR3BP, Kepler)
-│   ├── ads/                  #   box, tree, criteria, driver, merge, parallel, refine
+│   ├── domain/               #   box, zonotope, poly zonotope, reorient, enclosure, localize
+│   ├── ads/                  #   tree, criteria, driver, merge, parallel, refine
 │   └── testUtils.hpp         #   shared helpers/macros
 ├── examples/                 # two_body/, three_body/, wsb/ — Taylor, ADS, LOADS
 │   ├── common/output.hpp     #   shared I/O scaffolding (JSON schema, banners)
 │   └── plot/                 #   matplotlib scripts rendering the JSON outputs
-├── docs/                     # ode/, ads/, benchmarks/
+├── docs/                     # ode/, domain/, ads/, benchmarks/
 ├── cmake/                    # CMake package config template
 ├── .clang-format             # Code style (shared with tax)
 ├── CMakeLists.txt
@@ -131,33 +149,61 @@ Methods: `methods::Taylor<N>`, `Verner78`, `Verner89`, `Fehlberg78`,
 #include <tax/ode.hpp>
 using namespace tax::ode::methods;
 
-tax::ads::Box<double, 2> ic_box{center_vec, half_width_vec};
-auto tree = tax::ads::propagate</*P=*/6>(
+tax::domain::Box<double, 2> ic_box{center_vec, half_width_vec};
+auto sol = tax::ads::propagate</*P=*/6>(
     Verner89{}, tax::ads::TruncationCriterion{/*tol=*/1e-4, /*maxDepth=*/8},
     rhs, ic_box, ic_center, 0.0, 2 * M_PI, cfg);
 
+const auto& tree = sol.tree();
 for (int i : tree.done()) { const auto& l = tree.leaf(i); /* l.payload */ }
-auto stats = tax::ads::merge(tree, tax::ads::TruncationCriterion{1e-4});
+auto x_of_ic = sol.evaluate(ic);   // piecewise flow map at a physical IC point
+auto stats = tax::ads::merge(sol.tree(), tax::ads::TruncationCriterion{1e-4});
 ```
 
 Architecture: leaf-only arena tree (`AdsTree`); ADS interops with `tax::ode`
 events via `(SplitTrigger, SplitAction)`; splits happen at accepted-step
 boundaries only; the parallel `AdsDriver` runs `num_threads` jthread workers.
+`propagate` returns an `AdsSolution` wrapping the tree and per-leaf ODE
+`Solution` objects.
+
+**Domain interface:** the pipeline is generic over the IC domain type via the
+`tax::domain` module's two concept tiers (`Domain` / `LocatableDomain`). Three
+built-in primitives:
+
+- `Box<T, M>` — axis-aligned hyperrectangle (default; models both tiers).
+- `Zonotope<T, M>` — oriented parallelotope (full M×M generator matrix; models
+  both tiers; fewer leaves on rotated / correlated IC sets).
+- `PolynomialZonotope<T, N, M>` — polynomial image of the cube for curved IC
+  sets (models `Domain` only; `merge` and point location refused at compile
+  time).
+
+The domain module also owns the query/enclosure layer: `localize` (exact
+factor recovery), `AdsSolution::evaluate(pt)`, `intervalHull`,
+`zonotopeEnclosure` (even-exponent over-approximation), `zonotopeFrame`,
+`ellipsoidCover` / `ellipsoidIntervalHull`, and the reorientation helpers.
+
+**Naming convention:** Top-level orchestration/result types carry the `Ads`
+prefix — `AdsTree`, `AdsDriver`, `AdsSolution`, `AdsRefineDriver` — because
+their bare names are generic (and `Solution` would clash with
+`tax::ode::Solution`). Leaf/value/criteria types (`Leaf`, `SplitEvent`,
+`MergeStats`, the `*Criterion` structs) rely on the `tax::ads` namespace, and
+the set primitives (`Box`, `Zonotope`, …) on `tax::domain`.
 
 ---
 
 ## Code Conventions
 
 Same as `tax`: PascalCase types, camelCase functions/methods, snake_case locals,
-`lowercase` namespaces (`tax::ode`, `tax::ads`, `tax::ode::detail`,
-`tax::ads::detail`). `.clang-format` (Google style, 4-space indent, 100-col) is
+`lowercase` namespaces (`tax::ode`, `tax::domain`, `tax::ads`, and their
+`::detail` nests). `.clang-format` (Google style, 4-space indent, 100-col) is
 shared with `tax`:
 
 ```bash
 clang-format -i $(git ls-files 'include/**/*.hpp')
 ```
 
-Concepts over SFINAE (`tax::ode::concepts::Stepper`, `tax::ads::SplitCriterion`);
+Concepts over SFINAE (`tax::ode::concepts::Stepper`, `tax::domain::Domain`,
+`tax::ads::SplitCriterion`);
 `[[nodiscard]]` on accessors/results; `std::vector` allowed in these modules
 (unlike the allocation-free `tax` dense core).
 
@@ -166,7 +212,7 @@ Concepts over SFINAE (`tax::ode::concepts::Stepper`, `tax::ads::SplitCriterion`)
 ## Testing
 
 Tests are registered via `tax_add_test(name SOURCES path.cpp)` in
-`tests/CMakeLists.txt` (ADS) and `tests/ode/CMakeLists.txt` (ODE). Each links
+`tests/CMakeLists.txt` (domain + ADS) and `tests/ode/CMakeLists.txt` (ODE). Each links
 the `tax-flow` interface target and gtest_main.
 
 ```bash
@@ -178,5 +224,5 @@ ctest --test-dir build --output-on-failure
 
 1. All ctest targets pass locally (against the sibling `tax` or an installed one)
 2. Code is formatted with `clang-format`
-3. ODE/ADS changes have tests in `tests/ode/` or `tests/ads/`
+3. ODE/domain/ADS changes have tests in `tests/ode/`, `tests/domain/` or `tests/ads/`
 4. Core-type changes belong in `tax`, not here

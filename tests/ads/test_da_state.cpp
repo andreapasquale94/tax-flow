@@ -7,16 +7,16 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
 
-using tax::ads::Box;
-using tax::ads::create;
 using tax::ads::split;
+using tax::domain::Box;
+using tax::domain::create;
 
 namespace
 {
@@ -75,7 +75,7 @@ TEST( AdsDaState, SplitRoundTripPreservesValue )
     x0( 1 ) = 0.0;
     State F = create< P, M >( parent, x0 );
 
-    auto pr = split( F, parent, /*dim=*/0 );
+    auto pr = split( F, /*dim=*/0 );
     auto& FL = pr.first;
     auto& FR = pr.second;
 

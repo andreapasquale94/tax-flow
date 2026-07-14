@@ -10,6 +10,7 @@
 #include <array>
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <tax/ode/controllers.hpp>
 #include <tax/ode/vector_ops.hpp>
 #include <type_traits>
@@ -160,7 +161,13 @@ template < int N, class Controller >
     {
         (void)c_N_norm;
         (void)c_Nm1_norm;
-        return { controller.next_step( h, err_norm, tol, /*p_emb=*/N - 1 ), err_norm <= tol };
+        // Floor a zero truncation indicator (exact on polynomial RHS, where the
+        // top Taylor coefficients vanish) at eps*tol, mirroring the RK path. A
+        // literal zero would make the generic I/PI controllers SHRINK the step
+        // (ratio→1, factor 0.9) and stall the integration at min_step.
+        const double err_for_ctrl =
+            ( err_norm > 0.0 ) ? err_norm : tol * std::numeric_limits< double >::epsilon();
+        return { controller.next_step( h, err_for_ctrl, tol, /*p_emb=*/N - 1 ), err_norm <= tol };
     }
 }
 

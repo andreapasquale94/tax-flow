@@ -53,7 +53,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <tax/ads/box.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 

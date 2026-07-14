@@ -37,8 +37,8 @@
 #include <fstream>
 #include <iomanip>
 #include <string>
-#include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/ode.hpp>
 #include <thread>
 #include <vector>
@@ -135,7 +135,7 @@ int main( int argc, char** argv )
     cfg_ref.abstol = cfg_ref.reltol = 1e-12;
     cfg_ref.save_steps = true;
 
-    const tax::ads::Box< double, M > errBox{ { 0.0, 0.0 }, { kSigmaM, kSigmaTheta } };
+    const tax::domain::Box< double, M > errBox{ { 0.0, 0.0 }, { kSigmaM, kSigmaTheta } };
 
     Stopwatch clock;
 
@@ -160,7 +160,7 @@ int main( int argc, char** argv )
 
             // Seed the identity DA state on the (delta_m, delta_th) box and carry
             // it forward arc by arc; the integrator composes the per-arc maps.
-            auto x = tax::ads::create< P, M >( errBox, stateIC() );
+            auto x = tax::domain::create< P, M >( errBox, stateIC() );
             for ( int k = 0; k < kNArcs; ++k )
             {
                 const int state = seq[static_cast< std::size_t >( k )];
@@ -227,8 +227,8 @@ int main( int argc, char** argv )
         const std::array< double, M > l{ rng.symmetric( 1.0 ), rng.symmetric( 1.0 ) };
         const double dm = l[0] * kSigmaM, dth = l[1] * kSigmaTheta;
 
-        auto x = tax::ads::create< P, M >( errBox, stateIC() );  // surrogate path
-        auto xs = stateIC( dm, dth );                            // direct path
+        auto x = tax::domain::create< P, M >( errBox, stateIC() );  // surrogate path
+        auto xs = stateIC( dm, dth );                               // direct path
         for ( int k = 0; k < kNArcs; ++k )
         {
             const double magBase =

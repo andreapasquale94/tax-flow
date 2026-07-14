@@ -56,6 +56,11 @@ class Event
     // time." nullopt = no constraint. Default: no constraint.
     [[nodiscard]] virtual std::optional< T > nextStop( T /*t*/ ) const { return std::nullopt; }
 
+    // Start-of-run hook: clear any per-integration state so the same event
+    // object can drive a second integrate() call. Called by Integrator at the
+    // top of every integrate(). Default: nothing (stateless events).
+    virtual void reset() {}
+
     // Post-step hook: called once per accepted step (reads eval_, writes rec).
     virtual Action onStep( Recorder< State, T >& rec ) = 0;
 

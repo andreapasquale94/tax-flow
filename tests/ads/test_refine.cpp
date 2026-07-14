@@ -11,18 +11,18 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <tax/ads/box.hpp>
 #include <tax/ads/refine.hpp>
 #include <tax/ads/refine_criteria.hpp>
 #include <tax/core/multi_index.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/ode.hpp>
 #include <tax/tax.hpp>
 #include <vector>
 
-using tax::ads::Box;
 using tax::ads::CoefficientMatchCriterion;
 using tax::ads::VolumeRatioCriterion;
+using tax::domain::Box;
 using tax::ode::IntegratorConfig;
 using tax::ode::methods::Verner89;
 
@@ -61,7 +61,7 @@ ScState evalLeaf( const Leaf& leaf, const ScState& xi )
     std::array< double, M > xi_local{};
     for ( int j = 0; j < M; ++j )
         xi_local[static_cast< std::size_t >( j )] =
-            ( xi( j ) - leaf.box.center( j ) ) / leaf.box.halfWidth( j );
+            ( xi( j ) - leaf.domain.center( j ) ) / leaf.domain.halfWidth( j );
 
     ScState out;
     for ( int row = 0; row < D; ++row )
@@ -112,7 +112,7 @@ TEST( AdsRefine, VolumeRatioLeavesMatchReference )
 
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );
@@ -143,13 +143,27 @@ TEST( AdsRefine, CoefficientMatchLeavesMatchReference )
 
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );
         EXPECT_NEAR( predicted( 0 ), reference( 0 ), 1e-3 );
         EXPECT_NEAR( predicted( 1 ), reference( 1 ), 1e-3 );
     }
+}
+
+// Regression (A2): the refine driver schedules from its own queue, so the
+// returned tree's work queue must be drained — empty() like the classic driver.
+TEST( AdsRefine, ReturnedTreeHasEmptyWorkQueue )
+{
+    const double t1 = 2.0 * M_PI;
+    IntegratorConfig< double > cfg;
+    cfg.abstol = cfg.reltol = 1e-12;
+    ScState center{ 1.0, 0.0 };
+
+    auto tree = tax::ads::refine< P >( Verner89{}, VolumeRatioCriterion{ 1e-6, 10 }, rhs(), icBox(),
+                                       center, 0.0, t1, cfg );
+    EXPECT_TRUE( tree.empty() );
 }
 
 TEST( AdsRefine, FinerToleranceSplitsMore )
@@ -192,8 +206,8 @@ TEST( AdsRefine, ParallelMatchesSerial )
         const auto& lp = parallel.leaf( pIdx[i] );
         for ( int j = 0; j < M; ++j )
         {
-            EXPECT_DOUBLE_EQ( ls.box.center( j ), lp.box.center( j ) );
-            EXPECT_DOUBLE_EQ( ls.box.halfWidth( j ), lp.box.halfWidth( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.center( j ), lp.domain.center( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.halfWidth( j ), lp.domain.halfWidth( j ) );
         }
         constexpr std::size_t Nc = tax::numMonomials( P, M );
         for ( int row = 0; row < D; ++row )
@@ -224,7 +238,7 @@ TEST( AdsRefine, AggressiveSplitMatchesReference )
     } };
     for ( const auto& xi : samples )
     {
-        auto idx = tree.leaf( xi );
+        auto idx = tree.locate( xi );
         ASSERT_TRUE( idx.has_value() );
         const ScState predicted = evalLeaf( tree.leaf( *idx ), xi );
         const ScState reference = scalarReference( xi, t1 );
@@ -255,8 +269,8 @@ TEST( AdsRefine, AggressiveParallelMatchesSerial )
         const auto& lp = parallel.leaf( pIdx[i] );
         for ( int j = 0; j < M; ++j )
         {
-            EXPECT_DOUBLE_EQ( ls.box.center( j ), lp.box.center( j ) );
-            EXPECT_DOUBLE_EQ( ls.box.halfWidth( j ), lp.box.halfWidth( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.center( j ), lp.domain.center( j ) );
+            EXPECT_DOUBLE_EQ( ls.domain.halfWidth( j ), lp.domain.halfWidth( j ) );
         }
     }
 }

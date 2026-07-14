@@ -1,9 +1,12 @@
-// include/tax/ads/box.hpp
+// include/tax/domain/box.hpp
 //
-// Box<T, M> — axis-aligned hyperrectangle in M-dimensional space.
-// Used as the geometric primitive of the ADS tree: every leaf owns a
-// Box describing the subdomain of initial conditions for which its
-// payload (typically a DA-valued flow map) is valid.
+// Box<T, M> — axis-aligned hyperrectangle in M-dimensional space:
+//
+//   { center + halfWidth ⊙ ξ : ξ ∈ [-1, 1]^M }.
+//
+// The default Domain primitive: every leaf of an ADS tree owns one describing
+// the subdomain of initial conditions for which its payload (typically a
+// DA-valued flow map) is valid. Models both Domain and LocatableDomain.
 //
 // Storage is tax::la::VecNT<M, T> (fixed-size Eigen vector) on both
 // center and halfWidth — matches the rest of the tax pipeline, which
@@ -14,10 +17,11 @@
 
 #pragma once
 
+#include <tax/domain/domain.hpp>
 #include <tax/la/types.hpp>
 #include <utility>
 
-namespace tax::ads
+namespace tax::domain
 {
 
 template < class T, int M >
@@ -40,6 +44,19 @@ struct Box
         return true;
     }
 
+    // Exact inverse of denormalize: ξ_i = (pt_i - c_i) / h_i. A zero-width
+    // axis has no factor extent, so its coordinate is defined as 0 (whether
+    // the point lies ON the degenerate axis is contains()'s job).
+    template < class Derived >
+    [[nodiscard]] tax::la::VecNT< M, T > localize(
+        const Eigen::MatrixBase< Derived >& pt ) const noexcept
+    {
+        tax::la::VecNT< M, T > xi;
+        for ( int i = 0; i < M; ++i )
+            xi( i ) = halfWidth( i ) > T{ 0 } ? ( pt( i ) - center( i ) ) / halfWidth( i ) : T{ 0 };
+        return xi;
+    }
+
     [[nodiscard]] std::pair< Box, Box > split( int dim ) const noexcept
     {
         Box L = *this;
@@ -52,6 +69,10 @@ struct Box
         return { L, R };
     }
 
+    // Scalar position of the centre along axis `dim`. Mirrors Zonotope::splitOrdinate
+    // so merge() can order a sibling pair the same way for either domain.
+    [[nodiscard]] T splitOrdinate( int dim ) const noexcept { return center( dim ); }
+
     // Map d ∈ [-1, 1]^M to box coordinates: center + halfWidth ⊙ d.
     template < class Derived >
     [[nodiscard]] tax::la::VecNT< M, T > denormalize(
@@ -63,4 +84,11 @@ struct Box
     }
 };
 
-}  // namespace tax::ads
+template < class T, int M >
+struct domain_traits< Box< T, M > >
+{
+    using scalar = T;
+    static constexpr int dim = M;
+};
+
+}  // namespace tax::domain

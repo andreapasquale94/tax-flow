@@ -34,10 +34,10 @@
 #include <iomanip>
 #include <mutex>
 #include <string>
-#include <thread>
-#include <tax/ads/box.hpp>
 #include <tax/ads/da_state.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/ode.hpp>
+#include <thread>
 #include <vector>
 
 #include "common.hpp"
@@ -89,8 +89,8 @@ std::array< int, kNArcs > drawSequence( const MarkovModel& mk, Rng& rng )
 std::pair< std::vector< double >, std::vector< double > > referenceOrbit(
     double magBase, double thetaNom, const tax::ode::IntegratorConfig< double >& cfg )
 {
-    auto sol = tax::ode::propagate( Verner89{}, rhs( magBase, thetaNom ), stateIC(), 0.0, kPeriod,
-                                    cfg );
+    auto sol =
+        tax::ode::propagate( Verner89{}, rhs( magBase, thetaNom ), stateIC(), 0.0, kPeriod, cfg );
     std::vector< double > xs, ys;
     xs.reserve( sol.x.size() );
     ys.reserve( sol.x.size() );
@@ -137,13 +137,14 @@ int main( int argc, char** argv )
     cfg_ref.abstol = cfg_ref.reltol = 1e-12;
     cfg_ref.save_steps = true;
 
-    const tax::ads::Box< double, M > errBox{ { 0.0, 0.0 }, { kSigmaM, kSigmaTheta } };
+    const tax::domain::Box< double, M > errBox{ { 0.0, 0.0 }, { kSigmaM, kSigmaTheta } };
 
     Stopwatch clock;
 
     // ---- Monte Carlo over Markov sequences, parallel over samples -----------
     const int nThreads = adsThreads();
-    std::vector< std::array< SnapAccum, kNArcs > > perThread( static_cast< std::size_t >( nThreads ) );
+    std::vector< std::array< SnapAccum, kNArcs > > perThread(
+        static_cast< std::size_t >( nThreads ) );
 
     auto worker = [&]( int tid ) {
         auto& acc = perThread[static_cast< std::size_t >( tid )];
@@ -156,17 +157,18 @@ int main( int argc, char** argv )
             // Fixed execution-error bias per realisation (normalised box coords).
             std::array< std::array< double, M >, kNDraw > loc{};
             for ( int j = 0; j < kNDraw; ++j )
-                loc[static_cast< std::size_t >( j )] = { rng.symmetric( 1.0 ), rng.symmetric( 1.0 ) };
+                loc[static_cast< std::size_t >( j )] = { rng.symmetric( 1.0 ),
+                                                         rng.symmetric( 1.0 ) };
 
             // Seed the identity DA state on the (delta_m, delta_th) box and carry
             // it forward arc by arc; the integrator composes the per-arc maps.
-            auto x = tax::ads::create< P, M >( errBox, stateIC() );
+            auto x = tax::domain::create< P, M >( errBox, stateIC() );
             for ( int k = 0; k < kNArcs; ++k )
             {
                 const int level = seq[static_cast< std::size_t >( k )];
                 const double magBase = MarkovModel::levelFrac( level ) * m_nom;
-                auto sol = tax::ode::propagate( Verner89{}, rhs( magBase, theta_nom ), x,
-                                                k * kArc, ( k + 1 ) * kArc, cfg_mc );
+                auto sol = tax::ode::propagate( Verner89{}, rhs( magBase, theta_nom ), x, k * kArc,
+                                                ( k + 1 ) * kArc, cfg_mc );
                 x = sol.x.back();
 
                 auto& snap = acc[static_cast< std::size_t >( k )];
@@ -200,7 +202,8 @@ int main( int argc, char** argv )
             dst.sx += src.sx;
             dst.sy += src.sy;
             for ( int s = 0; s < MarkovModel::kNStates; ++s )
-                dst.lvl[static_cast< std::size_t >( s )] += src.lvl[static_cast< std::size_t >( s )];
+                dst.lvl[static_cast< std::size_t >( s )] +=
+                    src.lvl[static_cast< std::size_t >( s )];
         }
 
     // ---- Reference orbits (ballistic = all 0%, nominal = all 100%) ----------
@@ -218,12 +221,13 @@ int main( int argc, char** argv )
         const double dm = l[0] * kSigmaM, dth = l[1] * kSigmaTheta;
 
         // Surrogate path (carry DA state, eval at final time).
-        auto x = tax::ads::create< P, M >( errBox, stateIC() );
+        auto x = tax::domain::create< P, M >( errBox, stateIC() );
         // Direct path (scalar state with the same fixed errors).
         auto xs = stateIC( dm, dth );
         for ( int k = 0; k < kNArcs; ++k )
         {
-            const double magBase = MarkovModel::levelFrac( seq[static_cast< std::size_t >( k )] ) * m_nom;
+            const double magBase =
+                MarkovModel::levelFrac( seq[static_cast< std::size_t >( k )] ) * m_nom;
             auto sa = tax::ode::propagate( Verner89{}, rhs( magBase, theta_nom ), x, k * kArc,
                                            ( k + 1 ) * kArc, cfg_mc );
             x = sa.x.back();
@@ -292,14 +296,13 @@ int main( int argc, char** argv )
     out << "  \"grid\": { \"xmin\": " << xmin << ", \"xmax\": " << xmax << ", \"ymin\": " << ymin
         << ", \"ymax\": " << ymax << ", \"nx\": " << NX << ", \"ny\": " << NY << " },\n";
 
-    auto writeCurve = [&]( const char* key, const std::pair< std::vector< double >,
-                                                             std::vector< double > >& c, bool comma ) {
+    auto writeCurve = [&]( const char* key,
+                           const std::pair< std::vector< double >, std::vector< double > >& c,
+                           bool comma ) {
         out << "  \"" << key << "\": { \"x\": [";
-        for ( std::size_t i = 0; i < c.first.size(); ++i )
-            out << ( i ? "," : "" ) << c.first[i];
+        for ( std::size_t i = 0; i < c.first.size(); ++i ) out << ( i ? "," : "" ) << c.first[i];
         out << "], \"y\": [";
-        for ( std::size_t i = 0; i < c.second.size(); ++i )
-            out << ( i ? "," : "" ) << c.second[i];
+        for ( std::size_t i = 0; i < c.second.size(); ++i ) out << ( i ? "," : "" ) << c.second[i];
         out << "] }" << ( comma ? "," : "" ) << "\n";
     };
     writeCurve( "ballistic_orbit", ballistic, true );
@@ -323,19 +326,19 @@ int main( int argc, char** argv )
         // Radial dispersion envelope: percentiles of |r - mean| over the cloud.
         std::vector< double > dist;
         dist.reserve( snap.pts.size() );
-        for ( const auto& p : snap.pts )
-            dist.push_back( std::hypot( p.x - cx, p.y - cy ) );
+        for ( const auto& p : snap.pts ) dist.push_back( std::hypot( p.x - cx, p.y - cy ) );
         std::sort( dist.begin(), dist.end() );
         auto pct = [&]( double q ) {
             if ( dist.empty() ) return 0.0;
-            const std::size_t idx = std::min(
-                dist.size() - 1, static_cast< std::size_t >( q * ( dist.size() - 1 ) ) );
+            const std::size_t idx =
+                std::min( dist.size() - 1, static_cast< std::size_t >( q * ( dist.size() - 1 ) ) );
             return dist[idx];
         };
 
         // Thrust-level marginal at this arc (fraction of sequences per level).
         long long nseq = 0;
-        for ( int s = 0; s < MarkovModel::kNStates; ++s ) nseq += snap.lvl[static_cast< std::size_t >( s )];
+        for ( int s = 0; s < MarkovModel::kNStates; ++s )
+            nseq += snap.lvl[static_cast< std::size_t >( s )];
 
         // Sigma envelope radii: 2-D Gaussian-equivalent coverage masses
         // (1σ = 1-e^-0.5 = 39.35%, 2σ = 1-e^-2 = 86.47%, 3σ = 1-e^-4.5 = 98.89%).
@@ -355,22 +358,20 @@ int main( int argc, char** argv )
     out << "  ]\n}\n";
     out.close();
 
-    printBanner( "missed_thrust — low-thrust reachable set under missed thrust (Markov chain)",
-                 { { "scenario", scenario.name },
-                   { "case", preset.name },
-                   { "a_max (nominal)", std::to_string( m_nom ) },
-                   { "exec errors", "+-" + std::to_string( kSigmaM * 100 ) + "% mag, +-" +
-                                        std::to_string( preset.thetaNomDeg == 0.0 ? 5.0 : 5.0 ) +
-                                        " deg" },
-                   { "arcs / snapshots", std::to_string( kNArcs ) + " (every " +
-                                             std::to_string( static_cast< int >( kDegPerArc ) ) +
-                                             " deg)" },
-                   { "Markov", "5 levels, p_down=" + std::to_string( markov.pDown ) +
-                                   ", p_up=" + std::to_string( markov.pUp ) },
-                   { "samples", std::to_string( kNSeq ) + " seq x " + std::to_string( kNDraw ) +
-                                    " draws" },
-                   { "validation", "max |dr| = " + std::to_string( max_err ) },
-                   { "elapsed", std::to_string( elapsed_ms ) + " ms" },
-                   { "output", scenario.outfile } } );
+    printBanner(
+        "missed_thrust — low-thrust reachable set under missed thrust (Markov chain)",
+        { { "scenario", scenario.name },
+          { "case", preset.name },
+          { "a_max (nominal)", std::to_string( m_nom ) },
+          { "exec errors", "+-" + std::to_string( kSigmaM * 100 ) + "% mag, +-" +
+                               std::to_string( preset.thetaNomDeg == 0.0 ? 5.0 : 5.0 ) + " deg" },
+          { "arcs / snapshots", std::to_string( kNArcs ) + " (every " +
+                                    std::to_string( static_cast< int >( kDegPerArc ) ) + " deg)" },
+          { "Markov", "5 levels, p_down=" + std::to_string( markov.pDown ) +
+                          ", p_up=" + std::to_string( markov.pUp ) },
+          { "samples", std::to_string( kNSeq ) + " seq x " + std::to_string( kNDraw ) + " draws" },
+          { "validation", "max |dr| = " + std::to_string( max_err ) },
+          { "elapsed", std::to_string( elapsed_ms ) + " ms" },
+          { "output", scenario.outfile } } );
     return 0;
 }

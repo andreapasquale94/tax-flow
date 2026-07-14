@@ -1,17 +1,21 @@
 // include/tax/ads/tree.hpp
 //
-// AdsTree<Payload, M, T> — arena-backed leaf-only binary tree used by
+// AdsTree<Payload, Domain> — arena-backed leaf-only binary tree used by
 // the ADS driver. Splits append two children and retire the parent;
 // merges restore the parent and retire the pair. No internal "split"
 // nodes: every record in the arena is a Leaf, and the tree shape is
-// reconstructed from parentIdx / siblingIdx links.
+// reconstructed from parentIdx / siblingIdx links. The scalar type and
+// factor dimension are recovered from the Domain via domain_traits.
 //
 // Work queue: std::deque<int> driven in BFS order via popFront. The
 // driver pops a leaf, integrates, and either splits or finalize-s it.
 //
-// Point lookup: leaf(pt) does a linear scan over active+done (skipping
-// retired). At ADS-typical sizes (10..1000 leaves) this is faster than
-// a tree walk in practice and avoids the variant-node bookkeeping.
+// Point lookup: locate/locateFactors do a linear scan over active+done
+// (skipping retired). At ADS-typical sizes (10..1000 leaves) this is
+// faster than a tree walk in practice and avoids the variant-node
+// bookkeeping. Both require a LocatableDomain — a PolynomialZonotope
+// tree refuses point location at compile time (its contains() is only a
+// conservative hull test).
 
 #pragma once
 
@@ -21,8 +25,8 @@
 #include <deque>
 #include <optional>
 #include <span>
-#include <tax/ads/box.hpp>
 #include <tax/ads/leaf.hpp>
+#include <tax/domain/domain.hpp>
 #include <tax/la/types.hpp>
 #include <utility>
 #include <vector>
@@ -30,17 +34,26 @@
 namespace tax::ads
 {
 
-template < class Payload, int M, class T = double >
+template < class Payload, tax::domain::Domain Domain >
 class AdsTree
 {
    public:
-    using LeafT = Leaf< Payload, M, T >;
-    using BoxT = Box< T, M >;
+    using T = tax::domain::domain_scalar_t< Domain >;
+    static constexpr int M = tax::domain::domain_dim_v< Domain >;
+    using LeafT = Leaf< Payload, Domain >;
+    using DomainT = Domain;
 
-    [[nodiscard]] int init( BoxT box, Payload payload, T tEntry = T{ 0 } )
+    // A located point: the owning leaf and its exact factor coordinates.
+    struct Location
+    {
+        int idx;
+        tax::la::VecNT< M, T > xi;
+    };
+
+    [[nodiscard]] int init( Domain domain, Payload payload, T tEntry = T{ 0 } )
     {
         LeafT l{};
-        l.box = std::move( box );
+        l.domain = std::move( domain );
         l.payload = std::move( payload );
         l.tEntry = tEntry;
         const int idx = static_cast< int >( leaves_.size() );
@@ -68,6 +81,11 @@ class AdsTree
         return idx;
     }
 
+    // Discard any pending work-queue entries. Used by drivers (e.g. the refine
+    // driver) that schedule from their own queue instead of this one, so the
+    // returned tree reports empty()==true like the classic driver's.
+    void clearWorkQueue() noexcept { workQueue_.clear(); }
+
     [[nodiscard]] std::pair< int, int > split( int idx, int dim, Payload leftPayload,
                                                Payload rightPayload, T tEntry )
     {
@@ -78,15 +96,15 @@ class AdsTree
         leaves_[idx].retired = true;
         removeFromActive( idx );
 
-        // Halve the parent's box.
-        auto pr = leaves_[idx].box.split( dim );
-        auto& boxL = pr.first;
-        auto& boxR = pr.second;
+        // Halve the parent's domain.
+        auto pr = leaves_[idx].domain.split( dim );
+        auto& domL = pr.first;
+        auto& domR = pr.second;
 
         const int parentDepth = leaves_[idx].depth;
 
         LeafT L{};
-        L.box = std::move( boxL );
+        L.domain = std::move( domL );
         L.payload = std::move( leftPayload );
         L.depth = parentDepth + 1;
         L.parentIdx = idx;
@@ -94,7 +112,7 @@ class AdsTree
         L.tEntry = tEntry;
 
         LeafT R{};
-        R.box = std::move( boxR );
+        R.domain = std::move( domR );
         R.payload = std::move( rightPayload );
         R.depth = parentDepth + 1;
         R.parentIdx = idx;
@@ -120,6 +138,57 @@ class AdsTree
         return { lIdx, rIdx };
     }
 
+    // Split a leaf into two already-DONE children — no re-integration. Used when
+    // the split criterion fires exactly at the final time t1: the parent's flow
+    // map is complete, so tax::ads::split of it IS the pair of final child flow
+    // maps. The children are wired like split()'s (parent/sibling links) but go
+    // straight into doneList_, never onto the active list or work queue.
+    [[nodiscard]] std::pair< int, int > splitDone( int idx, int dim, Payload leftPayload,
+                                                   Payload rightPayload, T tEntry )
+    {
+        assert( idx >= 0 && idx < static_cast< int >( leaves_.size() ) );
+        assert( !leaves_[idx].done && !leaves_[idx].retired );
+
+        leaves_[idx].retired = true;
+        removeFromActive( idx );
+
+        auto pr = leaves_[idx].domain.split( dim );
+        const int parentDepth = leaves_[idx].depth;
+
+        LeafT L{};
+        L.domain = std::move( pr.first );
+        L.payload = std::move( leftPayload );
+        L.depth = parentDepth + 1;
+        L.parentIdx = idx;
+        L.splitDim = dim;
+        L.tEntry = tEntry;
+        L.done = true;
+
+        LeafT R{};
+        R.domain = std::move( pr.second );
+        R.payload = std::move( rightPayload );
+        R.depth = parentDepth + 1;
+        R.parentIdx = idx;
+        R.splitDim = dim;
+        R.tEntry = tEntry;
+        R.done = true;
+
+        const int lIdx = static_cast< int >( leaves_.size() );
+        leaves_.push_back( std::move( L ) );
+        listPos_.push_back( -1 );
+        const int rIdx = static_cast< int >( leaves_.size() );
+        leaves_.push_back( std::move( R ) );
+        listPos_.push_back( -1 );
+
+        leaves_[lIdx].siblingIdx = rIdx;
+        leaves_[rIdx].siblingIdx = lIdx;
+
+        pushDone( lIdx );
+        pushDone( rIdx );
+
+        return { lIdx, rIdx };
+    }
+
     void finalize( int idx )
     {
         assert( idx >= 0 && idx < static_cast< int >( leaves_.size() ) );
@@ -139,6 +208,10 @@ class AdsTree
         const int parent = leaves_[leftIdx].parentIdx;
         assert( parent >= 0 );
         assert( leaves_[parent].retired );
+        // Children MUST be done (in doneList_): removeFromDone below indexes via
+        // listPos_, which for an active leaf points into activeList_ and would
+        // silently corrupt both lists in a release build.
+        assert( leaves_[leftIdx].done && leaves_[rightIdx].done );
 
         // Both children become retired; the parent revives as done.
         // Preconditions above guarantee the children are in doneList_, not
@@ -174,22 +247,16 @@ class AdsTree
         return { doneList_.data(), doneList_.size() };
     }
 
-    // Reorder the done-leaf index list into a canonical, deterministic
-    // order: ascending box center, lexicographic over the M coordinates.
-    // Disjoint boxes have distinct centers, so this is a stable total
-    // order independent of insertion order — used to make parallel and
-    // serial propagation agree and to make output reproducible.
+    // Reorder the done-leaf index list into a canonical, deterministic order via
+    // tax::domain::domainLess (a strict total order over disjoint domains, found
+    // by ADL — center-lexicographic by default, coefficient-lexicographic for
+    // PolynomialZonotope). Independent of insertion order, so parallel and serial
+    // propagation agree and output is reproducible.
     void canonicalizeDone()
     {
         std::sort( doneList_.begin(), doneList_.end(), [this]( int a, int b ) {
-            const auto& ca = leaves_[static_cast< std::size_t >( a )].box.center;
-            const auto& cb = leaves_[static_cast< std::size_t >( b )].box.center;
-            for ( int i = 0; i < M; ++i )
-            {
-                if ( ca( i ) < cb( i ) ) return true;
-                if ( cb( i ) < ca( i ) ) return false;
-            }
-            return false;
+            return domainLess( leaves_[static_cast< std::size_t >( a )].domain,
+                               leaves_[static_cast< std::size_t >( b )].domain );
         } );
         for ( std::size_t i = 0; i < doneList_.size(); ++i )
             listPos_[static_cast< std::size_t >( doneList_[i] )] = static_cast< int >( i );
@@ -200,14 +267,45 @@ class AdsTree
         return { roots_.data(), roots_.size() };
     }
 
+    // First leaf (active first, then done) whose domain contains pt.
     template < class Derived >
-    [[nodiscard]] std::optional< int > leaf( const Eigen::MatrixBase< Derived >& pt ) const
+    [[nodiscard]] std::optional< int > locate( const Eigen::MatrixBase< Derived >& pt ) const
+        requires tax::domain::LocatableDomain< Domain >
     {
         for ( int idx : activeList_ )
-            if ( leaves_[idx].box.contains( pt ) ) return idx;
+            if ( leaves_[idx].domain.contains( pt ) ) return idx;
         for ( int idx : doneList_ )
-            if ( leaves_[idx].box.contains( pt ) ) return idx;
+            if ( leaves_[idx].domain.contains( pt ) ) return idx;
         return std::nullopt;
+    }
+
+    // Exact point location with factor coordinates: among the non-retired
+    // leaves whose domain reconstructs pt, the one with the smallest ‖ξ‖∞
+    // (robust on shared split boundaries, where siblings both report ξ = ±1).
+    // nullopt if no leaf claims the point.
+    template < class Derived >
+    [[nodiscard]] std::optional< Location > locateFactors( const Eigen::MatrixBase< Derived >& pt,
+                                                           T tol = T{ 1e-9 } ) const
+        requires tax::domain::LocatableDomain< Domain >
+    {
+        std::optional< Location > best;
+        T bestInf = T{ 1 } + tol;
+        auto consider = [&]( int idx ) {
+            const auto& d = leaves_[static_cast< std::size_t >( idx )].domain;
+            const tax::la::VecNT< M, T > xi = d.localize( pt );
+            const T inf = xi.template lpNorm< Eigen::Infinity >();
+            if ( inf > bestInf ) return;
+            // Reject points off the domain (e.g. off the span of a
+            // rank-deficient generator matrix): denormalize must round-trip.
+            const tax::la::VecNT< M, T > rec = d.denormalize( xi );
+            const T scale = T{ 1 } + pt.template lpNorm< Eigen::Infinity >();
+            if ( ( rec - pt ).template lpNorm< Eigen::Infinity >() > tol * scale ) return;
+            bestInf = inf;
+            best = Location{ idx, xi };
+        };
+        for ( int idx : activeList_ ) consider( idx );
+        for ( int idx : doneList_ ) consider( idx );
+        return best;
     }
 
    private:

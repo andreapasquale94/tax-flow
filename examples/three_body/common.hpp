@@ -32,7 +32,7 @@
 #include <Eigen/Eigenvalues>
 #include <array>
 #include <cmath>
-#include <tax/ads/box.hpp>
+#include <tax/domain/box.hpp>
 #include <tax/la/types.hpp>
 #include <tax/tax.hpp>
 #include <utility>
@@ -154,9 +154,9 @@ inline tax::la::VecNT< 4, double > icCenter()
     return base + kManifoldOffset * linL1().v_unstable;
 }
 
-inline tax::ads::Box< double, 4 > icBox()
+inline tax::domain::Box< double, 4 > icBox()
 {
-    return tax::ads::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
+    return tax::domain::Box< double, 4 >{ icCenter(), kIcBoxHalfWidth };
 }
 
 // ---- Boundary coordinates -> normalised 4D displacement ---------------------
